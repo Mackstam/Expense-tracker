@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Macks Expense Tracker v8.8.6</title>
+<title>Macks Expense Tracker v8.8.7</title>
 <style>
 :root{
   --bg:#0f172a; --panel:#111827; --panel2:#1f2937; --text:#e5e7eb; --muted:#94a3b8; --accent:#38bdf8; --green:#22c55e; --red:#ef4444; --yellow:#f59e0b; --border:#334155;
@@ -253,11 +253,11 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
       <button id="restoreAutoBtn" type="button">Restore latest auto backup</button>
       <input id="importJsonFile" type="file" accept=".json,application/json" class="hidden" />
     </div>
-    <div class="small" style="margin-top:10px">Version <strong>v8.8.6</strong> • Build <strong>1774118386</strong></div>
+    <div class="small" style="margin-top:10px">Version <strong>v8.8.7</strong> • Build <strong>1774124440</strong></div>
   </div>
 </section>
 
-<div class="version">v8.8.6</div>
+<div class="version">v8.8.7</div>
 
 <nav class="nav">
   <button data-tab="dashboard" class="active">Home</button>
@@ -320,7 +320,8 @@ let ui = {
   editingRecurringId: null,
   splitMode: 'custom',
   graphBars: [],
-  expandedPeople: {}
+  expandedPeople: {},
+  expandedSettledPeople: {}
 };
 
 function emptyState(){
@@ -391,7 +392,9 @@ function migrateIfNeeded(data){
           prepaidUntil: p.prepaidUntil || '',
           prepaidBalanceCad: Number(p.prepaidBalanceCad ?? p.prepaidBalance ?? 0),
           syntheticRepayments: p.syntheticRepayments || {},
+          manualRepayments: p.manualRepayments || {},
           syntheticSettledDates: p.syntheticSettledDates || {},
+          manualRepayments: p.manualRepayments || {},
           linkedIncomeEntryId: p.linkedIncomeEntryId || '',
           history: Array.isArray(p.history) ? p.history : (p.settledAt ? [{id:uid(), ts:p.settledAt, amountCad: amount}] : [])
         };
@@ -453,7 +456,9 @@ function migrateIfNeeded(data){
           prepaidUntil: p.prepaidUntil || '',
           prepaidBalanceCad: Number(p.prepaidBalanceCad ?? p.prepaidBalance ?? 0),
           syntheticRepayments: p.syntheticRepayments || {},
+          manualRepayments: p.manualRepayments || {},
           syntheticSettledDates: p.syntheticSettledDates || {},
+          manualRepayments: p.manualRepayments || {},
           linkedIncomeEntryId: p.linkedIncomeEntryId || '',
           history: []
         };
@@ -731,14 +736,18 @@ function getCreditSummary(ruleId, person){
   const prepaidUntil = template?.prepaidUntil || '';
   const syntheticRepayments = template?.syntheticRepayments || {};
   const syntheticSettledDates = template?.syntheticSettledDates || {};
+  const manualRepayments = template?.manualRepayments || {};
   const occurredDates = rule ? occurrencesInRange(rule, rule.startDate, todayStr()) : [];
   const coveredDates = [];
   const owedItems = [];
+  const settledItems = [];
   for(const date of occurredDates){
     const repaidForDate = Number(syntheticRepayments[date] || 0);
     const forceSettled = !!syntheticSettledDates[date];
+    const manual = manualRepayments[date] || null;
     if(forceSettled){
       coveredDates.push(date);
+      settledItems.push({date, amountCad:Number(manual?.paidAmountCad || repaidForDate || amount), paidAmountCad:Number(manual?.paidAmountCad || repaidForDate || amount), paidDate: manual?.paidDate || todayStr(), title: rule?.title || 'Recurring'});
       continue;
     }
     if(prepaidUntil && compareDate(date, prepaidUntil) <= 0){
@@ -756,6 +765,7 @@ function getCreditSummary(ruleId, person){
         balance = 0;
         if(repaidForDate >= owed - 0.009){
           coveredDates.push(date);
+          settledItems.push({date, amountCad:Number(owed.toFixed(2)), paidAmountCad:Number(repaidForDate.toFixed(2)), paidDate: manual?.paidDate || todayStr(), title: rule?.title || 'Recurring'});
         } else {
           owedItems.push({date, amountCad:Number(Math.max(0, owed - repaidForDate).toFixed(2))});
         }
@@ -764,6 +774,7 @@ function getCreditSummary(ruleId, person){
     }
     if(repaidForDate >= amount - 0.009){
       coveredDates.push(date);
+      settledItems.push({date, amountCad:Number(amount.toFixed(2)), paidAmountCad:Number(repaidForDate.toFixed(2)), paidDate: manual?.paidDate || todayStr(), title: rule?.title || 'Recurring'});
     } else {
       owedItems.push({date, amountCad:Number(Math.max(0, amount - repaidForDate).toFixed(2))});
     }
@@ -773,6 +784,7 @@ function getCreditSummary(ruleId, person){
     latestCoveredDate: coveredDates.length ? coveredDates[coveredDates.length-1] : '',
     prepaidRemaining: Number(balance.toFixed(2)),
     owedItems,
+    settledItems,
     needsRecharge: occurredDates.length>0 && (balance<=0.009) && owedItems.length>0
   };
 }
@@ -1306,7 +1318,6 @@ function renderPeople(){
     return people[name];
   };
 
-  // Non-credit items come from posted entries only, and only past/current dates.
   for(const e of state.entries){
     if(compareDate(e.date, todayStr()) > 0) continue;
     for(const s of (e.splits||[])){
@@ -1325,13 +1336,13 @@ function renderPeople(){
       } else if(s.repaid){
         p.settledItems.push({
           entryId:e.id, title:e.title, date:e.date, splitId:s.id,
-          amountCad:Number(s.amountCad||0), remainingCad:0, prepaidRemaining:0, repaid:true, mode:s.mode, needsRecharge:false
+          amountCad:Number(s.amountCad||0), remainingCad:0, prepaidRemaining:0, repaid:true, mode:s.mode, needsRecharge:false,
+          paidDate:(Array.isArray(s.history) && s.history.length ? s.history[s.history.length-1].ts : e.date)
         });
       }
     }
   }
 
-  // Credit/prepaid items are grouped from recurring rules, not from individual generated entries.
   for(const rule of state.recurringRules){
     for(const s of (rule.splitsTemplate||[])){
       const name = (s.person||'').trim();
@@ -1354,16 +1365,34 @@ function renderPeople(){
       for(const owed of summary.owedItems){
         p.outstanding += Number(owed.amountCad||0);
         p.owedItems.push({
-          entryId:`credit-${rule.id}-${owed.date}-${name}`,
+          entryId:`credit-${rule.id}-${owed.date}-${encodeURIComponent(name)}`,
           title: rule.title || 'Recurring',
           date: owed.date,
-          splitId:`credit-${rule.id}-${owed.date}-${name}`,
+          splitId:`credit-${rule.id}-${owed.date}-${encodeURIComponent(name)}`,
           amountCad:Number(s.amountCad||0),
           remainingCad:Number(owed.amountCad||0),
           prepaidRemaining:Number(summary.prepaidRemaining||0),
           repaid:false,
           mode:'credit',
           needsRecharge:true
+        });
+      }
+
+      for(const settled of (summary.settledItems||[])){
+        p.settledItems.push({
+          entryId:`credit-settled-${rule.id}-${settled.date}-${encodeURIComponent(name)}`,
+          title:settled.title || rule.title || 'Recurring',
+          date:settled.date,
+          splitId:`credit-settled-${rule.id}-${settled.date}-${encodeURIComponent(name)}`,
+          amountCad:Number(settled.amountCad||0),
+          remainingCad:0,
+          prepaidRemaining:Number(summary.prepaidRemaining||0),
+          repaid:true,
+          mode:'credit',
+          needsRecharge:false,
+          paidDate:settled.paidDate || todayStr(),
+          ruleId:rule.id,
+          person:name
         });
       }
     }
@@ -1374,6 +1403,7 @@ function renderPeople(){
   $('peopleList').innerHTML = names.map(name => {
     const p = people[name];
     const owed = p.owedItems.sort((a,b)=>a.date>b.date?1:-1);
+    const settled = p.settledItems.sort((a,b)=>a.date>b.date?1:-1);
     const preview = owed.slice(0,3);
     return `<div class="item">
       <div class="row between">
@@ -1409,15 +1439,134 @@ function renderPeople(){
             </div>
           </div>`).join('')}
       </div>` : ''}
+
+      ${settled.length ? `<div style="margin-top:12px">
+        <div class="row" style="margin-bottom:6px">
+          <button type="button" onclick="toggleSettled('${jsEsc(name)}')">${ui.expandedSettledPeople[name] ? 'Hide settled' : 'Show settled'} (${settled.length})</button>
+        </div>
+        <div id="person-settled-${slug(name)}" class="${ui.expandedSettledPeople[name] ? '' : 'hidden'}">
+          ${settled.map(it => settledItemHtml(name,it)).join('')}
+        </div>
+      </div>` : ''}
     </div>`;
   }).join('');
 }
 
+function settledItemHtml(name,it){
+  return `<div class="card" style="margin:8px 0 0;padding:10px">
+    <div class="row between">
+      <div>
+        <div>${esc(it.title)}</div>
+        <div class="small">${esc(it.date)} • paid ${esc(it.paidDate || '')}</div>
+      </div>
+      <div style="text-align:right">
+        <div>${fmt(it.amountCad)}</div>
+        <div class="row" style="justify-content:flex-end;margin-top:8px">
+          <button type="button" onclick="undoRepayment('${jsEsc(name)}','${jsEsc(it.entryId)}','${jsEsc(it.splitId)}')">Undo</button>
+          ${it.mode==='credit' ? `<button type="button" onclick="editRepayment('${jsEsc(name)}','${jsEsc(it.entryId)}','${jsEsc(it.splitId)}')">Edit</button>` : ''}
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
 function slug(s){ return String(s).toLowerCase().replace(/[^a-z0-9]+/g,'-'); }
 window.togglePersonAll = (name) => {
   ui.expandedPeople[name] = !ui.expandedPeople[name];
   renderPeople();
 };
+
+window.toggleSettled = (name) => {
+  ui.expandedSettledPeople[name] = !ui.expandedSettledPeople[name];
+  renderPeople();
+};
+
+window.undoRepayment = (name, entryId, splitId) => {
+  if(String(entryId).startsWith('credit-settled-')){
+    const m = String(entryId).match(/^credit-settled-(.+?)-(\d{4}-\d{2}-\d{2})-(.+)$/);
+    if(m){
+      const ruleId = m[1];
+      const date = m[2];
+      const person = decodeURIComponent(m[3] || '').replace(/%20/g,' ');
+      const rule = state.recurringRules.find(r => r.id===ruleId);
+      const template = (rule?.splitsTemplate||[]).find(x => ((x.person||'').trim().toLowerCase()===person.trim().toLowerCase()));
+      if(template){
+        template.syntheticRepayments = template.syntheticRepayments || {};
+        template.syntheticSettledDates = template.syntheticSettledDates || {};
+        template.manualRepayments = template.manualRepayments || {};
+        delete template.syntheticRepayments[date];
+        delete template.syntheticSettledDates[date];
+        delete template.manualRepayments[date];
+      }
+      state.entries = state.entries.filter(e => !(e.type==='income' && e.linkedRecurringRuleId===ruleId && typeof e.notes==='string' && e.notes.includes(`(${date})`)));
+      saveState();
+      renderAll();
+    }
+    return;
+  }
+
+  const e = state.entries.find(x=>x.id===entryId); if(!e) return;
+  const s = (e.splits||[]).find(x=>x.id===splitId); if(!s) return;
+  s.repaid = false;
+  s.remainingCad = Number(s.amountCad||0);
+  if(Array.isArray(s.history) && s.history.length){
+    const last = s.history[s.history.length-1];
+    if(last?.linkedIncomeEntryId){
+      state.entries = state.entries.filter(en => en.id !== last.linkedIncomeEntryId);
+    }
+    s.history.pop();
+  }
+  saveState();
+  renderAll();
+};
+
+window.editRepayment = (name, entryId, splitId) => {
+  if(String(entryId).startsWith('credit-settled-')){
+    const m = String(entryId).match(/^credit-settled-(.+?)-(\d{4}-\d{2}-\d{2})-(.+)$/);
+    if(m){
+      const ruleId = m[1];
+      const date = m[2];
+      const person = decodeURIComponent(m[3] || '').replace(/%20/g,' ');
+      const rule = state.recurringRules.find(r => r.id===ruleId);
+      const template = (rule?.splitsTemplate||[]).find(x => ((x.person||'').trim().toLowerCase()===person.trim().toLowerCase()));
+      const amt = Number(template?.amountCad || 0);
+      const current = Number(template?.syntheticRepayments?.[date] || amt);
+      const input = prompt(`Edit repaid amount for ${name} on ${date}`, current.toFixed(2));
+      if(input===null) return;
+      const paid = Number(input||0);
+      if(!(paid>=0)) return;
+      if(template){
+        template.syntheticRepayments = template.syntheticRepayments || {};
+        template.syntheticSettledDates = template.syntheticSettledDates || {};
+        template.manualRepayments = template.manualRepayments || {};
+        template.syntheticRepayments[date] = Number(paid.toFixed(2));
+        template.manualRepayments[date] = { paidAmountCad: Number(paid.toFixed(2)), paidDate: todayStr() };
+        if(paid >= amt - 0.009) template.syntheticSettledDates[date] = true;
+        else delete template.syntheticSettledDates[date];
+      }
+      state.entries = state.entries.filter(e => !(e.type==='income' && e.linkedRecurringRuleId===ruleId && typeof e.notes==='string' && e.notes.includes(`(${date})`)));
+      if(paid > 0){
+        state.entries.push({
+          id: uid(),
+          type:'income',
+          date: todayStr(),
+          title: `${name} repaid you`,
+          originalAmount: paid,
+          currency:'CAD',
+          fxRate:1,
+          amountCad: paid,
+          category:'Income',
+          paymentMethod:'E-Transfer',
+          notes:`Auto-created repayment for ${rule?.title || 'Recurring'} (${date})`,
+          linkedRecurringRuleId: ruleId || null
+        });
+      }
+      saveState();
+      renderAll();
+    }
+  }
+};
+
+
 function personItemHtml(name,it){
   const canRepay = (it.mode==='charge' || it.mode==='credit') && it.remainingCad>0;
   return `<div class="card" style="margin:8px 0 0;padding:10px">
@@ -1468,7 +1617,9 @@ window.markRepaidPrompt = (name, entryId, splitId) => {
       if(template){
         template.syntheticRepayments = template.syntheticRepayments || {};
         template.syntheticSettledDates = template.syntheticSettledDates || {};
+        template.manualRepayments = template.manualRepayments || {};
         template.syntheticRepayments[owedDate] = Number((Number(template.syntheticRepayments[owedDate] || 0) + paid).toFixed(2));
+        template.manualRepayments[owedDate] = { paidAmountCad: Number(template.syntheticRepayments[owedDate]), paidDate: todayStr() };
         if(template.syntheticRepayments[owedDate] >= amount - 0.009){
           template.syntheticSettledDates[owedDate] = true;
         }
