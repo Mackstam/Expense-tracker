@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Macks Expense Tracker v8.8.3</title>
+<title>Macks Expense Tracker v8.8.4</title>
 <style>
 :root{
   --bg:#0f172a; --panel:#111827; --panel2:#1f2937; --text:#e5e7eb; --muted:#94a3b8; --accent:#38bdf8; --green:#22c55e; --red:#ef4444; --yellow:#f59e0b; --border:#334155;
@@ -390,6 +390,7 @@ function migrateIfNeeded(data){
           mode,
           prepaidUntil: p.prepaidUntil || '',
           prepaidBalanceCad: Number(p.prepaidBalanceCad ?? p.prepaidBalance ?? 0),
+          syntheticRepayments: p.syntheticRepayments || {},
           linkedIncomeEntryId: p.linkedIncomeEntryId || '',
           history: Array.isArray(p.history) ? p.history : (p.settledAt ? [{id:uid(), ts:p.settledAt, amountCad: amount}] : [])
         };
@@ -450,6 +451,7 @@ function migrateIfNeeded(data){
           mode,
           prepaidUntil: p.prepaidUntil || '',
           prepaidBalanceCad: Number(p.prepaidBalanceCad ?? p.prepaidBalance ?? 0),
+          syntheticRepayments: p.syntheticRepayments || {},
           linkedIncomeEntryId: p.linkedIncomeEntryId || '',
           history: []
         };
@@ -720,10 +722,12 @@ function getCreditSummary(ruleId, person){
   const amount = Number(template?.amountCad || 0);
   let balance = Number(template?.prepaidBalanceCad || 0);
   const prepaidUntil = template?.prepaidUntil || '';
+  const syntheticRepayments = template?.syntheticRepayments || {};
   const occurredDates = rule ? occurrencesInRange(rule, rule.startDate, todayStr()) : [];
   const coveredDates = [];
   const owedItems = [];
   for(const date of occurredDates){
+    const repaidForDate = Number(syntheticRepayments[date] || 0);
     if(prepaidUntil && compareDate(date, prepaidUntil) <= 0){
       coveredDates.push(date);
       continue;
@@ -733,12 +737,22 @@ function getCreditSummary(ruleId, person){
       if(after >= -0.009){
         balance = Math.max(0, after);
         coveredDates.push(date);
+        continue;
       } else {
-        owedItems.push({date, amountCad:Number(Math.abs(after).toFixed(2))});
+        const owed = Math.abs(after);
         balance = 0;
+        if(repaidForDate >= owed - 0.009){
+          coveredDates.push(date);
+        } else {
+          owedItems.push({date, amountCad:Number((owed - repaidForDate).toFixed(2))});
+        }
+        continue;
       }
+    }
+    if(repaidForDate >= amount - 0.009){
+      coveredDates.push(date);
     } else {
-      owedItems.push({date, amountCad:Number(amount.toFixed(2))});
+      owedItems.push({date, amountCad:Number((amount - repaidForDate).toFixed(2))});
     }
   }
   return {
@@ -746,7 +760,7 @@ function getCreditSummary(ruleId, person){
     latestCoveredDate: coveredDates.length ? coveredDates[coveredDates.length-1] : '',
     prepaidRemaining: Number(balance.toFixed(2)),
     owedItems,
-    needsRecharge: coveredDates.length>0 && balance<=0.009
+    needsRecharge: occurredDates.length>0 && (balance<=0.009)
   };
 }
 
@@ -1416,7 +1430,6 @@ window.markRepaidPrompt = (name, entryId, splitId) => {
     if(m){
       const ruleId = m[1];
       const owedDate = m[2];
-      const personName = decodeURIComponent(m[3] || '').replace(/%20/g, ' ');
       const rule = state.recurringRules.find(r => r.id===ruleId);
       const template = (rule?.splitsTemplate||[]).find(x => ((x.person||'').trim().toLowerCase()===name.trim().toLowerCase()));
       const amount = Number(template?.amountCad || 0);
@@ -1439,9 +1452,9 @@ window.markRepaidPrompt = (name, entryId, splitId) => {
         notes:`Auto-created repayment for ${rule?.title || 'Recurring'} (${owedDate})`,
         linkedRecurringRuleId: ruleId || null
       });
-      // Store a recharge on the rule person's prepaid balance so the owed month is considered covered.
       if(template){
-        template.prepaidBalanceCad = Number((Number(template.prepaidBalanceCad||0) + paid).toFixed(2));
+        template.syntheticRepayments = template.syntheticRepayments || {};
+        template.syntheticRepayments[owedDate] = Number((Number(template.syntheticRepayments[owedDate] || 0) + paid).toFixed(2));
       }
       saveState();
       renderAll();
