@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Macks Expense Tracker v8.8.4</title>
+<title>Macks Expense Tracker v8.8.5</title>
 <style>
 :root{
   --bg:#0f172a; --panel:#111827; --panel2:#1f2937; --text:#e5e7eb; --muted:#94a3b8; --accent:#38bdf8; --green:#22c55e; --red:#ef4444; --yellow:#f59e0b; --border:#334155;
@@ -253,11 +253,11 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
       <button id="restoreAutoBtn" type="button">Restore latest auto backup</button>
       <input id="importJsonFile" type="file" accept=".json,application/json" class="hidden" />
     </div>
-    <div class="small" style="margin-top:10px">Version <strong>v8.8</strong></div>
+    <div class="small" style="margin-top:10px">Version <strong>v8.8.5</strong> • Build <strong>1774118386</strong></div>
   </div>
 </section>
 
-<div class="version">v8.8</div>
+<div class="version">v8.8.5</div>
 
 <nav class="nav">
   <button data-tab="dashboard" class="active">Home</button>
@@ -391,6 +391,7 @@ function migrateIfNeeded(data){
           prepaidUntil: p.prepaidUntil || '',
           prepaidBalanceCad: Number(p.prepaidBalanceCad ?? p.prepaidBalance ?? 0),
           syntheticRepayments: p.syntheticRepayments || {},
+          syntheticSettledDates: p.syntheticSettledDates || {},
           linkedIncomeEntryId: p.linkedIncomeEntryId || '',
           history: Array.isArray(p.history) ? p.history : (p.settledAt ? [{id:uid(), ts:p.settledAt, amountCad: amount}] : [])
         };
@@ -452,6 +453,7 @@ function migrateIfNeeded(data){
           prepaidUntil: p.prepaidUntil || '',
           prepaidBalanceCad: Number(p.prepaidBalanceCad ?? p.prepaidBalance ?? 0),
           syntheticRepayments: p.syntheticRepayments || {},
+          syntheticSettledDates: p.syntheticSettledDates || {},
           linkedIncomeEntryId: p.linkedIncomeEntryId || '',
           history: []
         };
@@ -723,11 +725,17 @@ function getCreditSummary(ruleId, person){
   let balance = Number(template?.prepaidBalanceCad || 0);
   const prepaidUntil = template?.prepaidUntil || '';
   const syntheticRepayments = template?.syntheticRepayments || {};
+  const syntheticSettledDates = template?.syntheticSettledDates || {};
   const occurredDates = rule ? occurrencesInRange(rule, rule.startDate, todayStr()) : [];
   const coveredDates = [];
   const owedItems = [];
   for(const date of occurredDates){
     const repaidForDate = Number(syntheticRepayments[date] || 0);
+    const forceSettled = !!syntheticSettledDates[date];
+    if(forceSettled){
+      coveredDates.push(date);
+      continue;
+    }
     if(prepaidUntil && compareDate(date, prepaidUntil) <= 0){
       coveredDates.push(date);
       continue;
@@ -744,7 +752,7 @@ function getCreditSummary(ruleId, person){
         if(repaidForDate >= owed - 0.009){
           coveredDates.push(date);
         } else {
-          owedItems.push({date, amountCad:Number((owed - repaidForDate).toFixed(2))});
+          owedItems.push({date, amountCad:Number(Math.max(0, owed - repaidForDate).toFixed(2))});
         }
         continue;
       }
@@ -752,7 +760,7 @@ function getCreditSummary(ruleId, person){
     if(repaidForDate >= amount - 0.009){
       coveredDates.push(date);
     } else {
-      owedItems.push({date, amountCad:Number((amount - repaidForDate).toFixed(2))});
+      owedItems.push({date, amountCad:Number(Math.max(0, amount - repaidForDate).toFixed(2))});
     }
   }
   return {
@@ -760,7 +768,7 @@ function getCreditSummary(ruleId, person){
     latestCoveredDate: coveredDates.length ? coveredDates[coveredDates.length-1] : '',
     prepaidRemaining: Number(balance.toFixed(2)),
     owedItems,
-    needsRecharge: occurredDates.length>0 && (balance<=0.009)
+    needsRecharge: occurredDates.length>0 && (balance<=0.009) && owedItems.length>0
   };
 }
 
@@ -1454,7 +1462,11 @@ window.markRepaidPrompt = (name, entryId, splitId) => {
       });
       if(template){
         template.syntheticRepayments = template.syntheticRepayments || {};
+        template.syntheticSettledDates = template.syntheticSettledDates || {};
         template.syntheticRepayments[owedDate] = Number((Number(template.syntheticRepayments[owedDate] || 0) + paid).toFixed(2));
+        if(template.syntheticRepayments[owedDate] >= amount - 0.009){
+          template.syntheticSettledDates[owedDate] = true;
+        }
       }
       saveState();
       renderAll();
