@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Macks Expense Tracker v8.8.2</title>
+<title>Macks Expense Tracker v8.8.3</title>
 <style>
 :root{
   --bg:#0f172a; --panel:#111827; --panel2:#1f2937; --text:#e5e7eb; --muted:#94a3b8; --accent:#38bdf8; --green:#22c55e; --red:#ef4444; --yellow:#f59e0b; --border:#334155;
@@ -1407,8 +1407,50 @@ function personItemHtml(name,it){
   </div>`;
 }
 window.markRepaidPrompt = (name, entryId, splitId) => {
-  const e = state.entries.find(x=>x.id===entryId); if(!e) return;
-  const s = (e.splits||[]).find(x=>x.id===splitId); if(!s) return;
+  let e = state.entries.find(x=>x.id===entryId);
+  let s = e ? (e.splits||[]).find(x=>x.id===splitId) : null;
+
+  // Support synthetic credit owed items created from recurring timeline summaries.
+  if((!e || !s) && String(entryId).startsWith('credit-')){
+    const m = String(entryId).match(/^credit-(.+?)-(\d{4}-\d{2}-\d{2})-(.+)$/);
+    if(m){
+      const ruleId = m[1];
+      const owedDate = m[2];
+      const personName = decodeURIComponent(m[3] || '').replace(/%20/g, ' ');
+      const rule = state.recurringRules.find(r => r.id===ruleId);
+      const template = (rule?.splitsTemplate||[]).find(x => ((x.person||'').trim().toLowerCase()===name.trim().toLowerCase()));
+      const amount = Number(template?.amountCad || 0);
+      const input = prompt(`How much did ${name} repay for ${rule?.title || 'this item'} on ${owedDate}?`, amount.toFixed(2));
+      if(input===null) return;
+      const paid = Number(input||0);
+      if(!(paid>0)) return;
+      const incomeId = uid();
+      state.entries.push({
+        id: incomeId,
+        type:'income',
+        date: todayStr(),
+        title: `${name} repaid you`,
+        originalAmount: paid,
+        currency:'CAD',
+        fxRate:1,
+        amountCad: paid,
+        category:'Income',
+        paymentMethod:'E-Transfer',
+        notes:`Auto-created repayment for ${rule?.title || 'Recurring'} (${owedDate})`,
+        linkedRecurringRuleId: ruleId || null
+      });
+      // Store a recharge on the rule person's prepaid balance so the owed month is considered covered.
+      if(template){
+        template.prepaidBalanceCad = Number((Number(template.prepaidBalanceCad||0) + paid).toFixed(2));
+      }
+      saveState();
+      renderAll();
+    }
+    return;
+  }
+
+  if(!e || !s) return;
+
   const remaining = Number(s.remainingCad ?? s.amountCad ?? 0);
   const input = prompt(`How much did ${name} repay? Remaining is ${remaining.toFixed(2)} CAD`, remaining.toFixed(2));
   if(input===null) return;
@@ -1420,7 +1462,6 @@ window.markRepaidPrompt = (name, entryId, splitId) => {
   s.remainingCad = Math.max(0, Number((remaining - paid).toFixed(2)));
   if(s.remainingCad<=0.009){ s.repaid = true; s.remainingCad = 0; }
   if(s.remainingCad < Number(s.amountCad||0)) s.linkedIncomeEntryId = incomeId;
-  // auto money-in entry (option B)
   state.entries.push({
     id: incomeId,
     type:'income',
