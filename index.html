@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Macks Expense Tracker v8.8.7</title>
+<title>Macks Expense Tracker v8.8.8</title>
 <style>
 :root{
   --bg:#0f172a; --panel:#111827; --panel2:#1f2937; --text:#e5e7eb; --muted:#94a3b8; --accent:#38bdf8; --green:#22c55e; --red:#ef4444; --yellow:#f59e0b; --border:#334155;
@@ -72,7 +72,7 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
 </header>
 
 <section id="tab-dashboard" class="tab">
-  <div class="card">
+  <div class="card" id="dashboardSummaryCard">
     <div class="row wrap between">
       <div class="row wrap">
         <button id="prevPeriodBtn">◀</button>
@@ -90,7 +90,23 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
     <div class="summaryGrid" id="summaryCards"></div>
   </div>
 
-  <div class="card">
+  <div class="card" id="dashboardNeedsActionCard">
+    <div class="row between">
+      <h3>Needs action</h3>
+      <div class="small">Only unpaid past/current items</div>
+    </div>
+    <div id="dashboardNeedsAction"></div>
+  </div>
+
+  <div class="card" id="dashboardPrepaidCard">
+    <div class="row between">
+      <h3>Prepaid summary</h3>
+      <div class="small">People currently covered by prepaid</div>
+    </div>
+    <div id="dashboardPrepaid"></div>
+  </div>
+
+  <div class="card" id="dashboardGraphCard">
     <div class="row between">
       <h3>Cash flow & recurring</h3>
       <div class="small">Tap a month bar to open that month</div>
@@ -246,6 +262,20 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
       </div>
     </div>
     <hr class="sep" />
+    <div class="card" style="margin:0 0 12px;padding:10px">
+      <h3>Dashboard settings</h3>
+      <div class="small" style="margin-bottom:8px">Choose which cards show on Home. Needs action only keeps the dashboard focused on unpaid items.</div>
+      <div class="grid2">
+        <label><input id="dashShowSummary" type="checkbox" /> Summary cards</label>
+        <label><input id="dashShowGraph" type="checkbox" /> Graph</label>
+        <label><input id="dashShowNeedsAction" type="checkbox" /> Needs action</label>
+        <label><input id="dashShowPrepaid" type="checkbox" /> Prepaid summary</label>
+      </div>
+      <div style="margin-top:10px">
+        <label><input id="dashNeedsActionOnly" type="checkbox" /> Needs action only mode</label>
+      </div>
+    </div>
+    <hr class="sep" />
     <div class="row wrap">
       <button id="exportCsvBtn" type="button">Export CSV</button>
       <button id="backupJsonBtn" type="button" class="primary">Backup JSON</button>
@@ -253,11 +283,11 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
       <button id="restoreAutoBtn" type="button">Restore latest auto backup</button>
       <input id="importJsonFile" type="file" accept=".json,application/json" class="hidden" />
     </div>
-    <div class="small" style="margin-top:10px">Version <strong>v8.8.7</strong> • Build <strong>1774124440</strong></div>
+    <div class="small" style="margin-top:10px">Version <strong>v8.8.8</strong> • Build <strong>1774126381</strong></div>
   </div>
 </section>
 
-<div class="version">v8.8.7</div>
+<div class="version">v8.8.8</div>
 
 <nav class="nav">
   <button data-tab="dashboard" class="active">Home</button>
@@ -330,7 +360,14 @@ function emptyState(){
     settings: {
       yourName: 'Macks',
       categories: clone(defaultCategories),
-      paymentMethods: clone(defaultPayments)
+      paymentMethods: clone(defaultPayments),
+      dashboard: {
+        showSummaryCards: true,
+        showGraph: true,
+        showNeedsAction: true,
+        showPrepaidSummary: true,
+        needsActionOnly: false
+      }
     },
     entries: [],
     recurringRules: [],
@@ -349,6 +386,13 @@ function migrateIfNeeded(data){
 
   if(!data.settings) data.settings = {yourName: topName, categories: [], paymentMethods: []};
   if(!data.settings.yourName) data.settings.yourName = topName;
+
+  data.settings.dashboard = data.settings.dashboard || {};
+  if(data.settings.dashboard.showSummaryCards === undefined) data.settings.dashboard.showSummaryCards = true;
+  if(data.settings.dashboard.showGraph === undefined) data.settings.dashboard.showGraph = true;
+  if(data.settings.dashboard.showNeedsAction === undefined) data.settings.dashboard.showNeedsAction = true;
+  if(data.settings.dashboard.showPrepaidSummary === undefined) data.settings.dashboard.showPrepaidSummary = true;
+  if(data.settings.dashboard.needsActionOnly === undefined) data.settings.dashboard.needsActionOnly = false;
 
   data.entries = Array.isArray(data.entries) ? data.entries : (Array.isArray(data.transactions) ? data.transactions : []);
   data.recurringRules = Array.isArray(data.recurringRules) ? data.recurringRules : (Array.isArray(data.recurring) ? data.recurring : (Array.isArray(data.rules) ? data.rules : []));
@@ -1905,8 +1949,100 @@ function handleGraphTap(ev){
 }
 
 
+
+function getDashboardPeopleSummary(){
+  const today = todayStr();
+  const people = {};
+  const ensure = (name) => {
+    if(!people[name]) people[name] = {name, outstanding:0, prepaidRemaining:0, owedCount:0};
+    return people[name];
+  };
+
+  for(const e of state.entries){
+    if(compareDate(e.date, today) > 0) continue;
+    for(const s of (e.splits||[])){
+      const name = (s.person||'').trim();
+      if(!name || s.mode==='mine' || s.mode==='nocharge' || s.mode==='credit') continue;
+      const eff = getEffectiveSplitStatus(e, s);
+      if(Number(eff._displayRemaining||0) > 0){
+        const p = ensure(name);
+        p.outstanding += Number(eff._displayRemaining||0);
+        p.owedCount += 1;
+      }
+    }
+  }
+
+  for(const rule of state.recurringRules){
+    for(const s of (rule.splitsTemplate||[])){
+      const name = (s.person||'').trim();
+      if(!name || s.mode!=='credit') continue;
+      const p = ensure(name);
+      const summary = getCreditSummary(rule.id, name);
+      p.prepaidRemaining = Math.max(p.prepaidRemaining, Number(summary.prepaidRemaining||0));
+      if(summary.owedItems?.length){
+        p.outstanding += summary.owedItems.reduce((sum,x)=>sum+Number(x.amountCad||0),0);
+        p.owedCount += summary.owedItems.length;
+      }
+    }
+  }
+  return Object.values(people).sort((a,b)=>b.outstanding-a.outstanding || b.prepaidRemaining-a.prepaidRemaining);
+}
+
+function renderDashboardWidgets(){
+  const cfg = state.settings.dashboard || {};
+  $('dashboardSummaryCard').classList.toggle('hidden', !cfg.showSummaryCards);
+  $('dashboardGraphCard').classList.toggle('hidden', !cfg.showGraph);
+  $('dashboardNeedsActionCard').classList.toggle('hidden', !cfg.showNeedsAction);
+  $('dashboardPrepaidCard').classList.toggle('hidden', !cfg.showPrepaidSummary);
+
+  const people = getDashboardPeopleSummary();
+  const needs = people.filter(p=>p.outstanding>0);
+  const prepaid = people.filter(p=>p.prepaidRemaining>0);
+
+  if(cfg.needsActionOnly){
+    $('dashboardPrepaidCard').classList.add('hidden');
+    $('dashboardSummaryCard').classList.toggle('hidden', true);
+  }
+
+  $('dashboardNeedsAction').innerHTML = needs.length ? needs.slice(0,6).map(p => `
+    <div class="card" style="margin:8px 0 0;padding:10px">
+      <div class="row between">
+        <div>
+          <div><strong>${esc(p.name)}</strong></div>
+          <div class="small">${p.owedCount} item${p.owedCount===1?'':'s'} need attention</div>
+        </div>
+        <div style="text-align:right">
+          <div>${fmt(p.outstanding)}</div>
+          <button type="button" onclick="switchTab('people')">Open People</button>
+        </div>
+      </div>
+    </div>
+  `).join('') : `<div class="small">Nothing needs action right now.</div>`;
+
+  $('dashboardPrepaid').innerHTML = prepaid.length ? prepaid.slice(0,6).map(p => `
+    <div class="card" style="margin:8px 0 0;padding:10px">
+      <div class="row between">
+        <div>
+          <div><strong>${esc(p.name)}</strong></div>
+          <div class="small">${p.outstanding>0 ? 'Also has unpaid items' : 'Fully covered right now'}</div>
+        </div>
+        <div style="text-align:right">
+          <div>${fmt(p.prepaidRemaining)}</div>
+          <button type="button" onclick="switchTab('people')">Open People</button>
+        </div>
+      </div>
+    </div>
+  `).join('') : `<div class="small">No prepaid balances to show.</div>`;
+}
+
 function renderSettings(){
   $('yourName').value = state.settings.yourName || 'Macks';
+  const cfg = state.settings.dashboard || {};
+  $('dashShowSummary').checked = !!cfg.showSummaryCards;
+  $('dashShowGraph').checked = !!cfg.showGraph;
+  $('dashShowNeedsAction').checked = !!cfg.showNeedsAction;
+  $('dashShowPrepaid').checked = !!cfg.showPrepaidSummary;
+  $('dashNeedsActionOnly').checked = !!cfg.needsActionOnly;
 }
 
 function exportJson(){
@@ -1952,6 +2088,7 @@ function restoreAuto(){
   } catch(e){ alert('No auto backups found.'); }
 }
 
+window.switchTab = switchTab;
 function switchTab(tab){
   ui.tab = tab;
   document.querySelectorAll('.tab').forEach(el => el.classList.add('hidden'));
@@ -1978,6 +2115,7 @@ function renderAll(){
   renderRecurring();
   renderSettings();
   renderGraph();
+  renderDashboardWidgets();
   if(changed) saveState(false);
 }
 
@@ -2011,6 +2149,19 @@ function bind(){
   $('txMonthBtn').addEventListener('click', ()=>{ ui.mode='month'; renderAll(); });
   $('txYearBtn').addEventListener('click', ()=>{ ui.mode='year'; renderAll(); });
   $('txUseDashboardBtn').addEventListener('click', ()=>{ switchTab('dashboard'); });
+  const bindDashSetting = (id, key) => {
+    $(id).addEventListener('change', ()=>{
+      state.settings.dashboard = state.settings.dashboard || {};
+      state.settings.dashboard[key] = $(id).checked;
+      saveState(false);
+      renderAll();
+    });
+  };
+  bindDashSetting('dashShowSummary', 'showSummaryCards');
+  bindDashSetting('dashShowGraph', 'showGraph');
+  bindDashSetting('dashShowNeedsAction', 'showNeedsAction');
+  bindDashSetting('dashShowPrepaid', 'showPrepaidSummary');
+  bindDashSetting('dashNeedsActionOnly', 'needsActionOnly');
   $('createForPeriodBtn').addEventListener('click', ()=> {
     const vars = state.recurringRules.filter(r=>r.ruleType==='variable');
     if(!vars.length){ alert('No variable recurring rules.'); return; }
