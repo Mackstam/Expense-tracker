@@ -1,0 +1,1835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Macks Expense Tracker v8.8.2</title>
+<style>
+:root{
+  --bg:#0f172a; --panel:#111827; --panel2:#1f2937; --text:#e5e7eb; --muted:#94a3b8; --accent:#38bdf8; --green:#22c55e; --red:#ef4444; --yellow:#f59e0b; --border:#334155;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:#0b1220;color:var(--text);padding-bottom:90px}
+header{padding:14px 14px 4px}
+h1,h2,h3{margin:0 0 8px}
+.small{font-size:12px;color:var(--muted)}
+.card{background:rgba(17,24,39,.96);border:1px solid var(--border);border-radius:14px;padding:12px;margin:10px 12px;box-shadow:0 4px 18px rgba(0,0,0,.18)}
+.row{display:flex;gap:8px;align-items:center}
+.row.wrap{flex-wrap:wrap}
+.row.between{justify-content:space-between}
+.col{display:flex;flex-direction:column;gap:8px}
+input,select,button,textarea{font:inherit}
+input,select,textarea{width:100%;background:#0f172a;color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px}
+textarea{min-height:70px;resize:vertical}
+label{font-size:13px;color:#cbd5e1;display:block;margin-bottom:4px}
+button{background:#0f172a;color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+button.primary{background:var(--accent);color:#03111a;border:none;font-weight:700}
+button.good{background:var(--green);color:#06230f;border:none}
+button.warn{background:var(--yellow);color:#231500;border:none}
+button.danger{background:var(--red);color:#fff;border:none}
+button.ghost{background:transparent}
+button:disabled{opacity:.5}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.summaryGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.pill{display:inline-block;border:1px solid var(--border);border-radius:999px;padding:6px 10px;font-size:12px;color:#cbd5e1;background:#0f172a}
+.value{font-size:20px;font-weight:700}
+.positive{color:#86efac}
+.negative{color:#fca5a5}
+.muted{color:var(--muted)}
+.hidden{display:none !important}
+.item{padding:10px 0;border-top:1px solid rgba(148,163,184,.14)}
+.item:first-child{border-top:none}
+.nav{position:fixed;left:0;right:0;bottom:0;background:rgba(15,23,42,.98);border-top:1px solid var(--border);display:grid;grid-template-columns:repeat(6,1fr);padding:8px 6px calc(8px + env(safe-area-inset-bottom));gap:6px;z-index:20}
+.nav button{padding:8px 4px;border-radius:12px;font-size:12px}
+.nav button.active{background:var(--accent);color:#03111a;border:none;font-weight:700}
+.version{position:fixed;right:10px;bottom:64px;font-size:12px;opacity:.55;background:#0f172a;border:1px solid var(--border);padding:4px 7px;border-radius:999px;z-index:25}
+.tableLine{display:grid;grid-template-columns:1.1fr .9fr .9fr;gap:8px;align-items:center}
+.splitRow{display:grid;grid-template-columns:1fr;gap:8px;align-items:end}
+@media(min-width:700px){.splitRow{grid-template-columns:1.1fr .8fr .9fr 1fr auto}}
+.splitRow .fieldRow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+@media(max-width:699px){.splitRow .fieldRow{grid-template-columns:1fr}}
+.splitRow input,.splitRow select{min-width:0;width:100%}
+.legend{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:#cbd5e1}
+.dot{width:10px;height:10px;border-radius:2px;display:inline-block;margin-right:5px;vertical-align:middle}
+canvas{width:100%;background:#0b1220;border:1px solid var(--border);border-radius:12px;touch-action:manipulation}
+.badge{font-size:11px;padding:4px 8px;border-radius:999px;background:#0f172a;border:1px solid var(--border)}
+.linkish{color:#7dd3fc;text-decoration:underline;cursor:pointer}
+hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
+@media(min-width:700px){
+  .summaryGrid{grid-template-columns:repeat(4,1fr)}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="row between">
+    <div>
+      <h2>Macks Expense Tracker</h2>
+      <div class="small">Single-file rebuild with recurring, splits, prepaid credits, graph, backups, and versioning.</div>
+    </div>
+  </div>
+</header>
+
+<section id="tab-dashboard" class="tab">
+  <div class="card">
+    <div class="row wrap between">
+      <div class="row wrap">
+        <button id="prevPeriodBtn">◀</button>
+        <div>
+          <div class="small">Selected period</div>
+          <div id="periodLabel" class="value" style="font-size:18px"></div>
+        </div>
+        <button id="nextPeriodBtn">▶</button>
+      </div>
+      <div class="row">
+        <button id="modeMonthBtn" class="primary">Month</button>
+        <button id="modeYearBtn">Year</button>
+      </div>
+    </div>
+    <div class="summaryGrid" id="summaryCards"></div>
+  </div>
+
+  <div class="card">
+    <div class="row between">
+      <h3>Cash flow & recurring</h3>
+      <div class="small">Tap a month bar to open that month</div>
+    </div>
+    <canvas id="graph" height="250"></canvas>
+    <div class="legend" style="margin-top:8px">
+      <span><span class="dot" style="background:#60a5fa"></span>Money in</span>
+      <span><span class="dot" style="background:#f87171"></span>Posted outflow</span>
+      <span><span class="dot" style="background:repeating-linear-gradient(45deg,#f59e0b,#f59e0b 4px,#1f2937 4px,#1f2937 8px)"></span>Projected recurring</span>
+    </div>
+  </div>
+</section>
+
+<section id="tab-add" class="tab hidden">
+  <div class="card">
+    <div class="row between">
+      <h3 id="entryFormTitle">Add entry</h3>
+      <div class="small" id="editingHint"></div>
+    </div>
+    <div class="grid2">
+      <div><label>Type</label><select id="type"><option value="expense">Expense</option><option value="income">Income</option></select></div>
+      <div><label>Date</label><input id="date" type="date" /></div>
+    </div>
+    <div><label>Title</label><input id="title" placeholder="Spotify, Groceries Costco, Paycheque..." /></div>
+    <div class="grid3">
+      <div><label>Amount</label><input id="amount" type="number" step="0.01" placeholder="0.00" /></div>
+      <div><label>Currency</label><select id="currency"></select></div>
+      <div><label>Rate to CAD</label><input id="fxRate" type="number" step="0.0001" /></div>
+    </div>
+    <div class="grid2">
+      <div><label>Category</label><select id="category"></select></div>
+      <div><label>Payment method / source</label><select id="paymentMethod"></select></div>
+    </div>
+    <div><label>Notes</label><textarea id="notes" placeholder="Optional notes"></textarea></div>
+
+    <div class="card" style="margin:12px 0 0;padding:10px">
+      <div class="row between"><strong>Split / repayment</strong><label><input id="splitEnabled" type="checkbox" /> Enable</label></div>
+      <div id="splitBox" class="hidden">
+        <div class="row" style="margin-top:8px">
+          <button id="splitCustomBtn" class="primary" type="button">Custom split</button>
+          <button id="splitEvenBtn" type="button">Even split</button>
+        </div>
+        <div id="splitEven" style="margin-top:8px" class="hidden">
+          <div class="grid2">
+            <div><label>Total people in split</label><input id="evenPeopleCount" type="number" min="2" value="2" /></div>
+            <div><label>Your name included?</label><select id="includeSelf"><option value="yes">Yes</option><option value="no">No</option></select></div>
+          </div>
+          <div class="small">Even split calculates equal amounts, and the people rows below let you name each person and set modes.</div>
+          <div class="row wrap" style="margin-top:8px">
+            <button type="button" id="evenGenerateBtn">Generate people rows</button>
+          </div>
+        </div>
+        <div id="splitCustom" style="margin-top:8px">
+          <div id="splitRows"></div>
+          <button type="button" id="addSplitRowBtn" style="margin-top:8px">+ Add person</button>
+          <div class="small" style="margin-top:8px">
+            Modes: Charge each cycle, Use prepaid credit, or Don’t charge. Add yourself using your name and choose "My share" so you are not charged back.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin:12px 0 0;padding:10px">
+      <div class="row between"><strong>Recurring</strong><label><input id="recurringEnabled" type="checkbox" /> Enable</label></div>
+      <div id="recurringBox" class="hidden">
+        <div class="grid2" style="margin-top:8px">
+          <div><label>Rule type</label><select id="recurringType"><option value="fixed">Fixed amount auto-post</option><option value="variable">Variable bill template</option></select></div>
+          <div><label>Interval</label><select id="recurringInterval"><option value="weekly">Weekly</option><option value="biweekly">Bi-weekly</option><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select></div>
+        </div>
+        <div class="grid2">
+          <div><label>Start date</label><input id="recurringStart" type="date" /></div>
+          <div><label>End date (optional)</label><input id="recurringEnd" type="date" /></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row wrap" style="margin-top:12px">
+      <button id="saveEntryBtn" class="primary" type="button">Save entry</button>
+      <button id="cancelEditBtn" type="button" class="hidden">Cancel edit</button>
+      <span id="saveToast" class="small"></span>
+    </div>
+  </div>
+</section>
+
+<section id="tab-transactions" class="tab hidden">
+  <div class="card">
+    <div class="row wrap between" style="margin-bottom:8px">
+      <div class="row wrap">
+        <button id="txPrevBtn" type="button">◀</button>
+        <div>
+          <div class="small">Transactions period</div>
+          <div id="txPeriodLabel" class="value" style="font-size:18px"></div>
+        </div>
+        <button id="txNextBtn" type="button">▶</button>
+      </div>
+      <div class="row">
+        <button id="txMonthBtn" type="button">Month</button>
+        <button id="txYearBtn" type="button">Year</button>
+      </div>
+    </div>
+    <div class="row wrap">
+      <div style="flex:1"><label>Search</label><input id="searchTx" placeholder="Search title, notes, person..." /></div>
+      <div style="min-width:130px"><label>Category</label><select id="filterCategory"></select></div>
+      <div style="min-width:130px"><label>Type</label><select id="filterType"><option value="">All</option><option value="expense">Expense</option><option value="income">Income</option></select></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="row between">
+      <h3>Transactions</h3>
+      <button id="txUseDashboardBtn" type="button">Match dashboard</button>
+    </div>
+    <div id="transactionsList"></div>
+  </div>
+</section>
+
+<section id="tab-people" class="tab hidden">
+  <div class="card">
+    <h3>People balances</h3>
+    <div class="small">Outstanding, prepaid credits, and repayment history.</div>
+    <div id="peopleList"></div>
+  </div>
+</section>
+
+<section id="tab-recurring" class="tab hidden">
+  <div class="card">
+    <div class="row between">
+      <h3>Recurring rules</h3>
+      <button id="createForPeriodBtn" type="button">Create variable bills for selected period</button>
+    </div>
+    <div class="small">Fixed rules post automatically in summaries/graph. Variable rules can prefill an entry for the selected month.</div>
+    <div id="recurringList"></div>
+  </div>
+</section>
+
+<section id="tab-settings" class="tab hidden">
+  <div class="card">
+    <h3>Settings</h3>
+    <div class="grid2">
+      <div><label>Your name</label><input id="yourName" /></div>
+      <div><label>Base currency</label><input value="CAD" disabled /></div>
+    </div>
+    <hr class="sep" />
+    <div class="grid2">
+      <div>
+        <label>Add custom category</label>
+        <div class="row"><input id="newCategory" /><button id="addCategoryBtn" type="button">Add</button></div>
+        <div id="categoriesList" class="small" style="margin-top:8px"></div>
+      </div>
+      <div>
+        <label>Add payment method</label>
+        <div class="row"><input id="newPaymentMethod" /><button id="addPaymentMethodBtn" type="button">Add</button></div>
+        <div id="paymentMethodsList" class="small" style="margin-top:8px"></div>
+      </div>
+    </div>
+    <hr class="sep" />
+    <div class="row wrap">
+      <button id="exportCsvBtn" type="button">Export CSV</button>
+      <button id="backupJsonBtn" type="button" class="primary">Backup JSON</button>
+      <button id="importJsonBtn" type="button">Import JSON</button>
+      <button id="restoreAutoBtn" type="button">Restore latest auto backup</button>
+      <input id="importJsonFile" type="file" accept=".json,application/json" class="hidden" />
+    </div>
+    <div class="small" style="margin-top:10px">Version <strong>v8.8</strong></div>
+  </div>
+</section>
+
+<div class="version">v8.8</div>
+
+<nav class="nav">
+  <button data-tab="dashboard" class="active">Home</button>
+  <button data-tab="add">Add</button>
+  <button data-tab="transactions">Tx</button>
+  <button data-tab="people">People</button>
+  <button data-tab="recurring">Recur</button>
+  <button data-tab="settings">Settings</button>
+</nav>
+
+<script>
+(() => {
+const VERSION = 'v8.8';
+const STORAGE_KEY = 'macks-expense-tracker-v8';
+const AUTO_KEY = 'macks-expense-tracker-v8-autobackups';
+const CAD_RATES = { CAD:1, USD:1.36, EUR:1.48, GBP:1.73, JPY:0.0092, MXN:0.080 };
+const defaultCategories = ['Food','Groceries','Transport','Shopping','Bills','Entertainment','Health','Travel','Pets','Rent','Subscriptions','Income','Other'];
+const defaultPayments = ['Credit Card','Checking','Debit','Cash','Auto Withdrawal','E-Transfer','Direct Deposit','Other'];
+
+const $ = (id) => document.getElementById(id);
+const fmt = (n) => Number(n||0).toLocaleString('en-CA',{style:'currency',currency:'CAD'});
+const shortFmt = (n) => (Number(n||0)).toLocaleString('en-CA',{style:'currency',currency:'CAD', maximumFractionDigits:0});
+const todayStr = () => new Date().toISOString().slice(0,10);
+const uid = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36);
+const clone = (x) => JSON.parse(JSON.stringify(x));
+const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function ymKey(dateStr){ const d=new Date(dateStr+'T00:00:00'); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function yKey(dateStr){ return new Date(dateStr+'T00:00:00').getFullYear()+''; }
+function dateParts(dateStr){ const d=new Date(dateStr+'T00:00:00'); return {y:d.getFullYear(), m:d.getMonth(), d:d.getDate()}; }
+function addDays(dateStr, n){ const d=new Date(dateStr+'T00:00:00'); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); }
+function addMonths(dateStr, n){
+  const d=new Date(dateStr+'T00:00:00');
+  const day=d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth()+n);
+  const maxDay=new Date(d.getFullYear(), d.getMonth()+1,0).getDate();
+  d.setDate(Math.min(day,maxDay));
+  return d.toISOString().slice(0,10);
+}
+function addYears(dateStr,n){
+  const d=new Date(dateStr+'T00:00:00');
+  const month=d.getMonth(), day=d.getDate();
+  d.setFullYear(d.getFullYear()+n, month, 1);
+  const maxDay=new Date(d.getFullYear(), month+1, 0).getDate();
+  d.setDate(Math.min(day,maxDay));
+  return d.toISOString().slice(0,10);
+}
+function compareDate(a,b){ return a<b?-1:a>b?1:0; }
+function startOfMonth(dateStr){ const p=dateParts(dateStr); return `${p.y}-${String(p.m+1).padStart(2,'0')}-01`; }
+function endOfMonth(dateStr){ const p=dateParts(dateStr); return new Date(p.y,p.m+1,0).toISOString().slice(0,10); }
+function monthLabelFromKey(k){ const [y,m]=k.split('-').map(Number); return `${monthNames[m-1]} ${y}`; }
+
+let state = loadState();
+let ui = {
+  tab: 'dashboard',
+  mode: 'month',
+  selectedDate: todayStr(),
+  editingId: null,
+  editingRecurringId: null,
+  splitMode: 'custom',
+  graphBars: [],
+  expandedPeople: {}
+};
+
+function emptyState(){
+  return {
+    version: VERSION,
+    settings: {
+      yourName: 'Macks',
+      categories: clone(defaultCategories),
+      paymentMethods: clone(defaultPayments)
+    },
+    entries: [],
+    recurringRules: [],
+    annualAssignments: [],
+    meta: { lastAutoBackupAt: null }
+  };
+}
+
+function migrateIfNeeded(data){
+  if(!data || typeof data !== 'object') return emptyState();
+
+  // Pull legacy top-level fields into settings.
+  const topCategories = Array.isArray(data.categories) ? data.categories : [];
+  const topMethods = Array.isArray(data.paymentMethods) ? data.paymentMethods : [];
+  const topName = data.profileName || data.yourName || 'Macks';
+
+  if(!data.settings) data.settings = {yourName: topName, categories: [], paymentMethods: []};
+  if(!data.settings.yourName) data.settings.yourName = topName;
+
+  data.entries = Array.isArray(data.entries) ? data.entries : (Array.isArray(data.transactions) ? data.transactions : []);
+  data.recurringRules = Array.isArray(data.recurringRules) ? data.recurringRules : (Array.isArray(data.recurring) ? data.recurring : (Array.isArray(data.rules) ? data.rules : []));
+  data.annualAssignments = Array.isArray(data.annualAssignments) ? data.annualAssignments : [];
+
+  // Normalize entries from older backups.
+  data.entries = data.entries.map((e) => {
+    const out = {...e};
+    out.id = out.id || uid();
+    out.type = out.type || 'expense';
+    out.date = out.date || todayStr();
+    out.title = out.title || out.name || 'Untitled';
+    out.notes = out.notes ?? out.note ?? '';
+    out.originalAmount = Number(out.originalAmount ?? out.amount ?? out.amountCad ?? 0);
+    out.currency = out.currency || out.originalCurrency || 'CAD';
+    out.fxRate = Number(out.fxRate ?? out.exchangeRate ?? 1);
+    out.amountCad = Number(out.amountCad ?? out.amount ?? (out.originalAmount * out.fxRate) ?? 0);
+    out.category = out.category || 'Other';
+    out.paymentMethod = out.paymentMethod || out.source || 'Other';
+
+    let splits = [];
+    if(Array.isArray(out.splits)){
+      splits = out.splits;
+    } else if(out.split && Array.isArray(out.split.people)){
+      splits = out.split.people.map((p) => {
+        const amount = Number(p.amountCad ?? p.amountOwed ?? p.amount ?? 0);
+        const settled = !!(p.settled ?? p.repaid ?? false);
+        let mode = 'charge';
+        const personName = p.name || p.person || '';
+        const yourName = (data.settings.yourName || topName || 'Macks').trim().toLowerCase();
+        if((personName||'').trim().toLowerCase() === yourName) mode = 'mine';
+        else if(p.noCharge) mode = 'nocharge';
+        else if(p.prepaidUntil) mode = 'credit';
+        return {
+          id: p.id || uid(),
+          person: personName,
+          amountCad: amount,
+          remainingCad: settled || mode==='nocharge' || mode==='mine' ? 0 : Number(p.remainingCad ?? amount),
+          repaid: settled || mode==='nocharge' || mode==='mine',
+          mode,
+          prepaidUntil: p.prepaidUntil || '',
+          prepaidBalanceCad: Number(p.prepaidBalanceCad ?? p.prepaidBalance ?? 0),
+          linkedIncomeEntryId: p.linkedIncomeEntryId || '',
+          history: Array.isArray(p.history) ? p.history : (p.settledAt ? [{id:uid(), ts:p.settledAt, amountCad: amount}] : [])
+        };
+      });
+    } else if(Array.isArray(out.peopleOwed)){
+      splits = out.peopleOwed.map((p) => {
+        const amount = Number(p.amountCad ?? p.amount ?? p.owedAmount ?? 0);
+        return {
+          id: p.id || uid(),
+          person: p.person || p.name || '',
+          amountCad: amount,
+          remainingCad: Number(p.remainingCad ?? p.remaining ?? amount),
+          repaid: !!(p.repaid ?? p.isRepaid ?? false),
+          mode: p.mode || (p.noCharge ? 'nocharge' : 'charge'),
+          history: Array.isArray(p.history) ? p.history : []
+        };
+      });
+    }
+    out.splits = splits;
+    out.splitMode = out.splitMode || (out.split?.mode === 'even' ? 'even' : ((out.split && Array.isArray(out.split.people)) ? 'custom' : (out.splits.length ? 'custom' : 'custom')));
+    return out;
+  });
+
+  // Normalize recurring rules from older backups.
+  data.recurringRules = data.recurringRules.map((r) => {
+    const out = {...r};
+    out.id = out.id || uid();
+    out.title = out.title || out.name || 'Recurring';
+    out.type = out.type || 'expense';
+    out.category = out.category || 'Other';
+    out.paymentMethod = out.paymentMethod || out.source || 'Other';
+    out.notes = out.notes ?? out.note ?? '';
+    out.originalAmount = Number(out.originalAmount ?? out.amount ?? out.amountCad ?? 0);
+    out.currency = out.currency || out.originalCurrency || 'CAD';
+    out.fxRate = Number(out.fxRate ?? out.exchangeRate ?? 1);
+    out.amountCad = Number(out.amountCad ?? out.amount ?? (out.originalAmount * out.fxRate) ?? 0);
+    out.ruleType = out.ruleType || out.amountMode || 'fixed';
+    out.interval = out.interval || out.frequency || 'monthly';
+    out.startDate = out.startDate || todayStr();
+    out.endDate = out.endDate || '';
+    if(Array.isArray(out.splitsTemplate)) {
+      out.splitsTemplate = out.splitsTemplate;
+    } else if(out.split && Array.isArray(out.split.people)){
+      const yourName = (data.settings.yourName || topName || 'Macks').trim().toLowerCase();
+      out.splitsTemplate = out.split.people.map((p) => {
+        const amount = Number(p.amountCad ?? p.amountOwed ?? p.amount ?? 0);
+        const personName = p.name || p.person || '';
+        let mode = 'charge';
+        if((personName||'').trim().toLowerCase() === yourName) mode = 'mine';
+        else if(p.noCharge) mode = 'nocharge';
+        else if(p.prepaidUntil) mode = 'credit';
+        return {
+          id: p.id || uid(),
+          person: personName,
+          amountCad: amount,
+          remainingCad: 0,
+          repaid: mode!=='charge',
+          mode,
+          prepaidUntil: p.prepaidUntil || '',
+          prepaidBalanceCad: Number(p.prepaidBalanceCad ?? p.prepaidBalance ?? 0),
+          linkedIncomeEntryId: p.linkedIncomeEntryId || '',
+          history: []
+        };
+      });
+      out.splitMode = out.split?.mode === 'even' ? 'even' : 'custom';
+    } else {
+      out.splitsTemplate = [];
+    }
+    return out;
+  });
+
+  // Rebuild settings lists from top-level values plus imported entry/rule values.
+  const inferredCategories = new Set([
+    ...defaultCategories,
+    ...topCategories,
+    ...(data.settings.categories || []),
+    ...data.entries.map(e => e.category).filter(Boolean),
+    ...data.recurringRules.map(r => r.category).filter(Boolean)
+  ]);
+  const inferredMethods = new Set([
+    ...defaultPayments,
+    ...topMethods,
+    ...(data.settings.paymentMethods || []),
+    ...data.entries.map(e => e.paymentMethod).filter(Boolean),
+    ...data.recurringRules.map(r => r.paymentMethod).filter(Boolean)
+  ]);
+  data.settings.categories = Array.from(inferredCategories);
+  data.settings.paymentMethods = Array.from(inferredMethods);
+  return data;
+}
+
+function loadState(){
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return emptyState();
+    return migrateIfNeeded(JSON.parse(raw));
+  } catch(e){ return emptyState(); }
+}
+function saveState(showToast=true){
+  state.version = VERSION;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  createAutoBackup();
+  if(showToast){ setSaveToast('Saved'); }
+}
+function createAutoBackup(){
+  try{
+    const backups = JSON.parse(localStorage.getItem(AUTO_KEY)||'[]');
+    backups.unshift({ ts: new Date().toISOString(), data: state });
+    localStorage.setItem(AUTO_KEY, JSON.stringify(backups.slice(0,8)));
+  }catch(e){}
+}
+function setSaveToast(text){
+  $('saveToast').textContent = text;
+  setTimeout(()=>{ if($('saveToast').textContent===text) $('saveToast').textContent=''; }, 1800);
+}
+
+function populateStaticOptions(){
+  const currency = $('currency');
+  currency.innerHTML = Object.keys(CAD_RATES).map(c => `<option value="${c}">${c}</option>`).join('');
+  currency.value = 'CAD';
+  $('fxRate').value = '1';
+  renderCategorySelects();
+  renderPaymentMethodSelects();
+}
+function renderCategorySelects(){
+  const opts = state.settings.categories.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  $('category').innerHTML = opts;
+  $('filterCategory').innerHTML = `<option value="">All</option>` + opts;
+  $('categoriesList').innerHTML = state.settings.categories.map(c => `<span class="badge">${esc(c)} <span class="linkish" onclick="appDeleteCategory('${jsEsc(c)}')">×</span></span>`).join(' ');
+}
+function renderPaymentMethodSelects(){
+  const opts = state.settings.paymentMethods.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  $('paymentMethod').innerHTML = opts;
+  $('paymentMethodsList').innerHTML = state.settings.paymentMethods.map(c => `<span class="badge">${esc(c)} <span class="linkish" onclick="appDeletePaymentMethod('${jsEsc(c)}')">×</span></span>`).join(' ');
+}
+function esc(s){ return String(s??'').replace(/[&<>"]/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[m])); }
+function jsEsc(s){ return String(s??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+
+window.appDeleteCategory = (c) => {
+  if(defaultCategories.includes(c)){ alert('Built-in category cannot be removed.'); return; }
+  state.settings.categories = state.settings.categories.filter(x => x !== c);
+  saveState(false); renderCategorySelects();
+};
+window.appDeletePaymentMethod = (c) => {
+  if(defaultPayments.includes(c)){ alert('Built-in payment method cannot be removed.'); return; }
+  state.settings.paymentMethods = state.settings.paymentMethods.filter(x => x !== c);
+  saveState(false); renderPaymentMethodSelects();
+};
+
+function selectedMonthKey(){ return ymKey(ui.selectedDate); }
+function selectedYearKey(){ return new Date(ui.selectedDate+'T00:00:00').getFullYear()+''; }
+function currentPeriodLabel(){
+  if(ui.mode==='month') return monthLabelFromKey(selectedMonthKey());
+  return selectedYearKey();
+}
+function inSelectedPeriod(entry){
+  return ui.mode==='month' ? ymKey(entry.date)===selectedMonthKey() : yKey(entry.date)===selectedYearKey();
+}
+function projectedRecurringForPeriod(periodMode, key){
+  const res = [];
+  for(const r of state.recurringRules){
+    const occ = occurrencesInPeriod(r, periodMode, key);
+    if(!occ.length) continue;
+    for(const date of occ){
+      const existing = state.entries.find(e => e.recurringRuleId===r.id && e.date===date);
+      if(existing && r.ruleType==='fixed') continue;
+      if(r.ruleType==='variable'){
+        const lastPosted = getLastPostedFromRule(r.id);
+        const amount = Number(lastPosted?.amountCad || r.lastAmountCad || r.amountCad || 0);
+        if(!amount) continue;
+        res.push({rule:r, date, amountCad: amount, projected:true});
+      }else{
+        res.push({rule:r, date, amountCad: Number(r.amountCad||0), projected:true});
+      }
+    }
+  }
+  return res;
+}
+function getLastPostedFromRule(ruleId){
+  return state.entries.filter(e => e.recurringRuleId===ruleId).sort((a,b)=>a.date<b.date?1:-1)[0];
+}
+
+function cloneSplitTemplateForEntry(rule){
+  return (rule.splitsTemplate||[]).map(s => ({
+    ...s,
+    prepaidBalanceCad: Number(s.prepaidBalanceCad||0),
+    remainingCad: s.mode==='charge' ? Number(s.amountCad||0) : 0,
+    repaid: s.mode!=='charge'
+  }));
+}
+
+function syncRuleSplitToEntry(rule, entry){
+  const oldSplits = Array.isArray(entry.splits) ? entry.splits : [];
+  entry.splits = (rule.splitsTemplate||[]).map(t => {
+    const old = oldSplits.find(os => (os.id && os.id===t.id) || ((os.person||'').trim().toLowerCase()===((t.person||'').trim().toLowerCase())));
+    const merged = old ? {...old, ...t} : {...t};
+    merged.prepaidBalanceCad = Number(t.prepaidBalanceCad ?? merged.prepaidBalanceCad ?? 0);
+    if(merged.mode==='charge'){
+      merged.remainingCad = old && !old.repaid ? Number(old.remainingCad ?? merged.amountCad ?? 0) : Number(merged.amountCad||0);
+      merged.repaid = !!old?.repaid && Number(merged.remainingCad||0)<=0.009;
+    } else {
+      merged.remainingCad = 0;
+      merged.repaid = true;
+    }
+    return merged;
+  });
+}
+
+function ensureRecurringEntriesToToday(){
+  const today = todayStr();
+  let changed = false;
+  for(const rule of state.recurringRules){
+    if(rule.ruleType !== 'fixed') continue;
+    const occ = occurrencesInRange(rule, rule.startDate, today);
+    for(const date of occ){
+      let existing = state.entries.find(e => e.recurringRuleId===rule.id && e.date===date && e.type===rule.type);
+      if(!existing){
+        existing = {
+          id: uid(),
+          type: rule.type || 'expense',
+          date,
+          title: rule.title || 'Recurring',
+          originalAmount: Number(rule.originalAmount ?? rule.amountCad ?? 0),
+          currency: rule.currency || 'CAD',
+          fxRate: Number(rule.fxRate || 1),
+          amountCad: Number(rule.amountCad || 0),
+          category: rule.category || 'Other',
+          paymentMethod: rule.paymentMethod || 'Other',
+          notes: rule.notes || '',
+          recurringRuleId: rule.id,
+          recurringGenerated: true,
+          splitMode: rule.splitMode || 'custom',
+          evenPeopleCount: rule.evenPeopleCount || null,
+          includeSelf: !!rule.includeSelf,
+          splits: cloneSplitTemplateForEntry(rule)
+        };
+        state.entries.push(existing);
+        changed = true;
+      } else {
+        existing.title = rule.title || existing.title;
+        existing.category = rule.category || existing.category;
+        existing.paymentMethod = rule.paymentMethod || existing.paymentMethod;
+        existing.notes = rule.notes ?? existing.notes;
+        existing.amountCad = Number(rule.amountCad || existing.amountCad || 0);
+        existing.originalAmount = Number(rule.originalAmount ?? existing.originalAmount ?? existing.amountCad ?? 0);
+        existing.currency = rule.currency || existing.currency || 'CAD';
+        existing.fxRate = Number(rule.fxRate || existing.fxRate || 1);
+        existing.splitMode = rule.splitMode || existing.splitMode || 'custom';
+        existing.evenPeopleCount = rule.evenPeopleCount || existing.evenPeopleCount || null;
+        existing.includeSelf = !!(rule.includeSelf ?? existing.includeSelf);
+        syncRuleSplitToEntry(rule, existing);
+      }
+    }
+  }
+
+  // de-duplicate same recurring rule/date/type keeping first encountered entry
+  const seen = new Set();
+  const filtered = [];
+  for(const e of state.entries){
+    if(e.recurringRuleId){
+      const key = `${e.recurringRuleId}__${e.date}__${e.type}`;
+      if(seen.has(key)){
+        changed = true;
+        continue;
+      }
+      seen.add(key);
+    }
+    filtered.push(e);
+  }
+  state.entries = filtered;
+  return changed;
+}
+
+function occurrencesInRange(rule, startDate, endDate){
+  const out = [];
+  let cur = rule.startDate;
+  let guard = 0;
+  while(compareDate(cur, endDate) <= 0 && guard < 1500){
+    if(compareDate(cur, startDate) >= 0 && compareDate(cur, endDate) <= 0 && compareDate(cur, rule.endDate || '9999-12-31') <= 0){
+      out.push(cur);
+    }
+    cur = nextOccurrence(cur, rule.interval);
+    guard++;
+  }
+  return out;
+}
+
+function getCreditTimeline(ruleId, person){
+  const rule = state.recurringRules.find(r => r.id===ruleId);
+  const personKey = (person||'').trim().toLowerCase();
+  const template = (rule?.splitsTemplate||[]).find(s => ((s.person||'').trim().toLowerCase()===personKey));
+  const startBalance = Number(template?.prepaidBalanceCad || 0);
+  const prepaidUntil = template?.prepaidUntil || '';
+  const entries = state.entries
+    .filter(e => e.recurringRuleId===ruleId && compareDate(e.date, todayStr()) <= 0)
+    .sort((a,b)=>a.date===b.date ? (a.id>b.id?1:-1) : (a.date>b.date?1:-1));
+  let balance = startBalance;
+  const map = {};
+  for(const e of entries){
+    const s = (e.splits||[]).find(x => ((x.person||'').trim().toLowerCase()===personKey));
+    if(!s) continue;
+    const amount = Number(s.amountCad || 0);
+    if(prepaidUntil && compareDate(e.date, prepaidUntil) <= 0){
+      map[e.id] = {covered:true, owed:0, prepaidRemaining:balance, needsRecharge:false};
+      continue;
+    }
+    if(balance > 0){
+      const after = Number((balance - amount).toFixed(2));
+      if(after >= 0){
+        balance = after;
+        map[e.id] = {covered:true, owed:0, prepaidRemaining:balance, needsRecharge:balance<=0.009};
+      } else {
+        balance = 0;
+        map[e.id] = {covered:false, owed:Number(Math.abs(after).toFixed(2)), prepaidRemaining:0, needsRecharge:true};
+      }
+    } else {
+      map[e.id] = {covered:false, owed:Number(amount.toFixed(2)), prepaidRemaining:0, needsRecharge:true};
+    }
+  }
+  return {startBalance, map};
+}
+
+
+function getCreditSummary(ruleId, person){
+  const rule = state.recurringRules.find(r => r.id===ruleId);
+  const personKey = (person||'').trim().toLowerCase();
+  const template = (rule?.splitsTemplate||[]).find(s => ((s.person||'').trim().toLowerCase()===personKey));
+  const amount = Number(template?.amountCad || 0);
+  let balance = Number(template?.prepaidBalanceCad || 0);
+  const prepaidUntil = template?.prepaidUntil || '';
+  const occurredDates = rule ? occurrencesInRange(rule, rule.startDate, todayStr()) : [];
+  const coveredDates = [];
+  const owedItems = [];
+  for(const date of occurredDates){
+    if(prepaidUntil && compareDate(date, prepaidUntil) <= 0){
+      coveredDates.push(date);
+      continue;
+    }
+    if(balance > 0){
+      const after = Number((balance - amount).toFixed(2));
+      if(after >= -0.009){
+        balance = Math.max(0, after);
+        coveredDates.push(date);
+      } else {
+        owedItems.push({date, amountCad:Number(Math.abs(after).toFixed(2))});
+        balance = 0;
+      }
+    } else {
+      owedItems.push({date, amountCad:Number(amount.toFixed(2))});
+    }
+  }
+  return {
+    coveredCount: coveredDates.length,
+    latestCoveredDate: coveredDates.length ? coveredDates[coveredDates.length-1] : '',
+    prepaidRemaining: Number(balance.toFixed(2)),
+    owedItems,
+    needsRecharge: coveredDates.length>0 && balance<=0.009
+  };
+}
+
+function occurrencesInPeriod(rule, mode, key){
+  const start = rule.startDate;
+  const end = rule.endDate || '9999-12-31';
+  const out = [];
+  if(mode==='month'){
+    const [y,m] = key.split('-').map(Number);
+    const periodStart = `${y}-${String(m).padStart(2,'0')}-01`;
+    const periodEnd = new Date(y,m,0).toISOString().slice(0,10);
+    let cur = start;
+    let guard=0;
+    while(compareDate(cur, periodEnd) <= 0 && guard<500){
+      if(compareDate(cur, start)>=0 && compareDate(cur,end)<=0 && compareDate(cur, periodStart)>=0 && compareDate(cur,periodEnd)<=0) out.push(cur);
+      cur = nextOccurrence(cur, rule.interval);
+      guard++;
+    }
+    return out;
+  } else {
+    const y = Number(key);
+    const periodStart = `${y}-01-01`, periodEnd = `${y}-12-31`;
+    let cur = start;
+    let guard=0;
+    while(compareDate(cur, periodEnd) <= 0 && guard<1200){
+      if(compareDate(cur, start)>=0 && compareDate(cur,end)<=0 && compareDate(cur, periodStart)>=0 && compareDate(cur,periodEnd)<=0) out.push(cur);
+      cur = nextOccurrence(cur, rule.interval);
+      guard++;
+    }
+    return out;
+  }
+}
+function nextOccurrence(date, interval){
+  if(interval==='weekly') return addDays(date, 7);
+  if(interval==='biweekly') return addDays(date, 14);
+  if(interval==='monthly') return addMonths(date, 1);
+  if(interval==='yearly') return addYears(date, 1);
+  return addMonths(date, 1);
+}
+
+function computePeriodSummary(){
+  const actual = state.entries.filter(inSelectedPeriod);
+  const income = actual.filter(e=>e.type==='income').reduce((s,e)=>s+Number(e.amountCad||0),0);
+  const outflow = actual.filter(e=>e.type==='expense').reduce((s,e)=>s+Number(e.amountCad||0),0);
+  const outstanding = actual.filter(e=>e.type==='expense' && compareDate(e.date, todayStr()) <= 0).flatMap(e => (e.splits||[]).map(s => getEffectiveSplitStatus(e, s))).filter(s=>!s.repaid && s.mode!=='mine' && s.mode!=='nocharge').reduce((sum,x)=>sum+Number(x._displayRemaining || 0),0);
+  const recurringProjected = projectedRecurringForPeriod(ui.mode, ui.mode==='month' ? selectedMonthKey() : selectedYearKey())
+    .filter(x=>x.rule.type==='expense' || !x.rule.type)
+    .reduce((s,x)=>s+Number(x.amountCad||0),0);
+  const recurringThis = projectedRecurringForPeriod('month', selectedMonthKey()).reduce((s,x)=>s+Number(x.amountCad||0),0);
+  const nextMonthKey = ymKey(addMonths(startOfMonth(ui.selectedDate),1));
+  const recurringNext = projectedRecurringForPeriod('month', nextMonthKey).reduce((s,x)=>s+Number(x.amountCad||0),0);
+  const recurringYear = projectedRecurringForPeriod('year', selectedYearKey()).reduce((s,x)=>s+Number(x.amountCad||0),0)
+    + state.entries.filter(e=>yKey(e.date)===selectedYearKey() && e.recurringRuleId && e.type==='expense').reduce((s,e)=>s+Number(e.amountCad||0),0);
+  const rechargeDue = state.recurringRules.reduce((count,r) => count + (r.splitsTemplate||[]).filter(s => s.mode==='credit' && Number(s.prepaidBalanceCad||0) <= 0.009).length, 0);
+  const netSpend = outflow - outstanding;
+  return { income, outflow, outstanding, netSpend, recurringThis, recurringNext, recurringYear, recurringProjected, rechargeDue };
+}
+
+function renderSummaryCards(){
+  const s = computePeriodSummary();
+  const cards = [
+    ['Money in', s.income, 'positive'],
+    ['Money out', s.outflow, 'negative'],
+    ['Net spend', s.netSpend, ''],
+    ['Still owed to you', s.outstanding, ''],
+    ['Recurring this month', s.recurringThis, ''],
+    ['Recurring next month', s.recurringNext, ''],
+    ['Recurring this year', s.recurringYear, ''],
+    ['Estimated recurring still due', s.recurringProjected, ''],
+    ['Recharge reminders', s.rechargeDue, '']
+  ];
+  $('summaryCards').innerHTML = cards.map(([label,val,cls]) => `
+    <div class="card" style="margin:0;padding:10px">
+      <div class="small">${label}</div>
+      <div class="value ${cls}" style="font-size:18px">${fmt(val)}</div>
+    </div>`).join('');
+}
+
+function renderTransactions(){
+  $('txPeriodLabel').textContent = currentPeriodLabel();
+  $('txMonthBtn').classList.toggle('primary', ui.mode==='month');
+  $('txYearBtn').classList.toggle('primary', ui.mode==='year');
+  const q = $('searchTx').value.trim().toLowerCase();
+  const cat = $('filterCategory').value;
+  const typ = $('filterType').value;
+  const items = state.entries
+    .filter(inSelectedPeriod)
+    .filter(e => !cat || e.category===cat)
+    .filter(e => !typ || e.type===typ)
+    .filter(e => {
+      if(!q) return true;
+      const blob = [e.title, e.notes, e.category, e.paymentMethod, ...(e.splits||[]).map(s=>s.person)].join(' ').toLowerCase();
+      return blob.includes(q);
+    })
+    .sort((a,b)=>a.date<b.date?1:-1);
+
+  if(!items.length){ $('transactionsList').innerHTML = `<div class="small">No transactions in this period.</div>`; return; }
+  $('transactionsList').innerHTML = items.map(e => {
+    const splitSummary = (e.splits||[]).length ? `<div class="small">Splits: ${(e.splits||[]).map(s => {
+      const eff = getEffectiveSplitStatus(e, s);
+      const tag = s.mode==='credit' ? `(prepaid ${fmt(eff._prepaidRemaining)})` : s.mode==='nocharge'?'(no charge)':s.mode==='mine'?'(me)':s.repaid?'(repaid)':'';
+      return `${esc(s.person)} ${fmt(eff._displayRemaining||0)} ${tag}`;
+    }).join(', ')}</div>` : '';
+    const fx = e.currency && e.currency!=='CAD' ? `<div class="small">${Number(e.originalAmount||0)} ${esc(e.currency)} @ ${Number(e.fxRate||1)}</div>` : '';
+    return `<div class="item">
+      <div class="row between">
+        <div>
+          <div><strong>${esc(e.title)}</strong> <span class="badge">${esc(e.type)}</span></div>
+          <div class="small">${esc(e.date)} • ${esc(e.category||'')} • ${esc(e.paymentMethod||'')}</div>
+          ${fx}
+          ${splitSummary}
+          ${e.notes ? `<div class="small">${esc(e.notes)}</div>` : ''}
+        </div>
+        <div style="text-align:right">
+          <div class="value" style="font-size:17px">${fmt(e.amountCad)}</div>
+          <div class="row" style="justify-content:flex-end;margin-top:8px">
+            <button type="button" onclick="editEntry('${e.id}')">Edit</button>
+            <button type="button" class="danger" onclick="deleteEntry('${e.id}')">Delete</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+window.editEntry = (id) => {
+  const e = state.entries.find(x => x.id===id);
+  if(!e) return;
+  ui.editingId = id;
+  ui.editingRecurringId = null;
+  $('entryFormTitle').textContent = 'Edit entry';
+  $('editingHint').textContent = 'Editing existing transaction';
+  $('type').value = e.type;
+  $('date').value = e.date;
+  $('title').value = e.title||'';
+  $('amount').value = e.originalAmount ?? e.amountCad ?? '';
+  $('currency').value = e.currency||'CAD';
+  $('fxRate').value = e.fxRate || CAD_RATES[e.currency||'CAD'] || 1;
+  $('category').value = e.category || state.settings.categories[0];
+  $('paymentMethod').value = e.paymentMethod || state.settings.paymentMethods[0];
+  $('notes').value = e.notes || '';
+  $('splitEnabled').checked = !!(e.splits && e.splits.length);
+  toggleSplit();
+  ui.splitMode = e.splitMode || 'custom';
+  updateSplitModeBtns();
+  if(ui.splitMode==='even'){
+    $('splitEven').classList.remove('hidden');
+    $('splitCustom').classList.add('hidden');
+    $('evenPeopleCount').value = e.evenPeopleCount || 2;
+    $('includeSelf').value = e.includeSelf ? 'yes':'no';
+  } else {
+    $('splitEven').classList.add('hidden');
+    $('splitCustom').classList.remove('hidden');
+  }
+  renderSplitRows(e.splits||[]);
+  const linkedRule = e.recurringRuleId ? state.recurringRules.find(r=>r.id===e.recurringRuleId) : null;
+  $('recurringEnabled').checked = !!linkedRule;
+  toggleRecurring();
+  if(linkedRule){
+    $('recurringType').value = linkedRule.ruleType || 'fixed';
+    $('recurringInterval').value = linkedRule.interval || 'monthly';
+    $('recurringStart').value = linkedRule.startDate || e.date;
+    $('recurringEnd').value = linkedRule.endDate || '';
+    ui.editingRecurringId = linkedRule.id;
+  } else {
+    $('recurringType').value = 'fixed';
+    $('recurringInterval').value = 'monthly';
+    $('recurringStart').value = e.date;
+    $('recurringEnd').value = '';
+  }
+  $('cancelEditBtn').classList.remove('hidden');
+  switchTab('add');
+};
+
+window.deleteEntry = (id) => {
+  if(!confirm('Delete this transaction?')) return;
+  state.entries = state.entries.filter(e => e.id!==id);
+  saveState();
+  renderAll();
+};
+
+function renderSplitRows(rows=[]){
+  const holder = $('splitRows');
+  const arr = rows.length ? rows : [];
+  holder.innerHTML = arr.map(r => splitRowHtml(r)).join('');
+}
+function splitRowHtml(r={}){
+  return `<div class="splitRow item" data-split-id="${esc(r.id || uid())}">
+    <div class="fieldRow">
+      <div><label>Name</label><input data-field="person" value="${esc(r.person||'')}" placeholder="Marina, Jess, Macks..." /></div>
+      <div><label>Amount / cycle CAD</label><input data-field="amountCad" type="number" step="0.01" value="${esc(r.amountCad ?? '')}" placeholder="0.00" /></div>
+      <div><label>Mode</label><select data-field="mode">
+        <option value="charge" ${r.mode==='charge'?'selected':''}>Charge each cycle</option>
+        <option value="credit" ${r.mode==='credit'?'selected':''}>Use prepaid credit</option>
+        <option value="nocharge" ${r.mode==='nocharge'?'selected':''}>Don’t charge</option>
+        <option value="mine" ${r.mode==='mine'?'selected':''}>My share</option>
+      </select></div>
+    </div>
+    <div><label>Prepaid balance</label><input data-field="prepaidBalanceCad" type="number" step="0.01" value="${esc(r.prepaidBalanceCad ?? '')}" placeholder="0.00" /></div>
+    <div><button type="button" class="danger" onclick="removeSplitRow(this)">Remove</button></div>
+  </div>`;
+}
+window.removeSplitRow = (btn) => { btn.closest('.splitRow').remove(); };
+
+function collectSplitRows(){
+  return Array.from(document.querySelectorAll('#splitRows .splitRow')).map(row => {
+    const obj = { id: row.dataset.splitId, repaid:false };
+    row.querySelectorAll('[data-field]').forEach(el => {
+      obj[el.dataset.field] = el.value;
+    });
+    obj.amountCad = Number(obj.amountCad||0);
+    obj.prepaidBalanceCad = Number(obj.prepaidBalanceCad||0);
+    obj.remainingCad = Number(obj.amountCad||0);
+    return obj;
+  }).filter(x => x.person || x.amountCad);
+}
+function maybeNormalizeSelfShare(s){
+  const yourName = (state.settings.yourName||'Macks').trim().toLowerCase();
+  if((s.person||'').trim().toLowerCase()===yourName && s.mode!=='mine'){
+    s.mode = 'mine';
+  }
+  return s;
+}
+function saveEntry(){
+  const type = $('type').value;
+  const date = $('date').value || todayStr();
+  const title = $('title').value.trim();
+  if(!title){ alert('Please enter a title.'); return; }
+  const originalAmount = Number($('amount').value||0);
+  const currency = $('currency').value;
+  const fxRate = Number($('fxRate').value||1);
+  const amountCad = Number((originalAmount * fxRate).toFixed(2));
+  const category = $('category').value;
+  const paymentMethod = $('paymentMethod').value;
+  const notes = $('notes').value.trim();
+  let splits = [];
+  let splitMode = ui.splitMode;
+  let evenPeopleCount = null, includeSelf = false;
+
+  if($('splitEnabled').checked){
+    if(ui.splitMode==='custom'){
+      splits = collectSplitRows().map(maybeNormalizeSelfShare).map(s => {
+        if(s.mode==='nocharge'){ s.amountCad = 0; s.remainingCad = 0; s.repaid = true; }
+        if(s.mode==='mine'){ s.amountCad = Number(s.amountCad||0); s.remainingCad = 0; s.repaid = true; }
+        if(s.mode==='credit'){ s.remainingCad = 0; s.repaid = false; }
+        return s;
+      });
+    } else {
+      evenPeopleCount = Number($('evenPeopleCount').value||0);
+      includeSelf = $('includeSelf').value==='yes';
+      if(evenPeopleCount < 2){ alert('Even split needs at least 2 people.'); return; }
+      const share = Number((amountCad / evenPeopleCount).toFixed(2));
+      const owedCount = includeSelf ? evenPeopleCount - 1 : evenPeopleCount;
+      const existingRows = collectSplitRows();
+      const generated = [];
+      for(let i=0;i<owedCount;i++){
+        const old = existingRows[i] || {};
+        const row = maybeNormalizeSelfShare({
+          id: old.id || uid(),
+          person: old.person || '',
+          amountCad: share,
+          remainingCad: old.mode==='credit' ? 0 : Number(old.remainingCad ?? share),
+          repaid: !!old.repaid,
+          mode: old.mode || 'charge',
+          prepaidBalanceCad: Number(old.prepaidBalanceCad || 0)
+        });
+        if(row.mode==='nocharge'){ row.amountCad = 0; row.remainingCad = 0; row.repaid = true; }
+        if(row.mode==='mine'){ row.remainingCad = 0; row.repaid = true; }
+        if(row.mode==='credit'){ row.remainingCad = 0; row.repaid = false; }
+        generated.push(row);
+      }
+      splits = generated;
+    }
+  }
+
+  const entry = {
+    id: ui.editingId || uid(),
+    type, date, title, originalAmount, currency, fxRate, amountCad, category, paymentMethod, notes,
+    splits, splitMode, evenPeopleCount, includeSelf
+  };
+
+  if(ui.editingId){
+    const idx = state.entries.findIndex(e=>e.id===ui.editingId);
+    const prev = state.entries[idx];
+    if(prev && prev.splits && splits.length){
+      entry.splits = entry.splits.map(ns => {
+        const old = prev.splits.find(os => os.id===ns.id || (os.person===ns.person));
+        const merged = old ? {...old, ...ns} : ns;
+        if(merged.mode==='credit' && old && (Number(ns.prepaidBalanceCad||0)===0) && Number(old.prepaidBalanceCad||0)>0) {
+          merged.prepaidBalanceCad = Number(old.prepaidBalanceCad||0);
+        }
+        return merged;
+      });
+    }
+    state.entries[idx] = {...prev, ...entry};
+  } else {
+    state.entries.push(entry);
+  }
+
+  // Recurring create/update
+  if($('recurringEnabled').checked){
+    const rule = {
+      id: ui.editingRecurringId || uid(),
+      title, type, category, paymentMethod, notes,
+      amountCad,
+      originalAmount,
+      currency,
+      fxRate,
+      ruleType: $('recurringType').value,
+      interval: $('recurringInterval').value,
+      startDate: $('recurringStart').value || date,
+      endDate: $('recurringEnd').value || '',
+      splitsTemplate: clone(entry.splits||[]),
+      splitMode: entry.splitMode,
+      evenPeopleCount: entry.evenPeopleCount,
+      includeSelf: entry.includeSelf,
+      lastAmountCad: amountCad
+    };
+    const ri = state.recurringRules.findIndex(r=>r.id===rule.id);
+    if(ri>=0) state.recurringRules[ri] = rule;
+    else state.recurringRules.push(rule);
+    syncRecurringRuleSplits(rule.id);
+    // attach entry to rule if same date and title
+    entry.recurringRuleId = rule.id;
+    if(ui.editingId){
+      const idx = state.entries.findIndex(e=>e.id===ui.editingId);
+      state.entries[idx].recurringRuleId = rule.id;
+    } else {
+      state.entries[state.entries.length-1].recurringRuleId = rule.id;
+    }
+  } else if(ui.editingRecurringId){
+    // if editing and recurring turned off, keep historical entries but remove rule
+    state.recurringRules = state.recurringRules.filter(r=>r.id!==ui.editingRecurringId);
+    if(ui.editingId){
+      const idx = state.entries.findIndex(e=>e.id===ui.editingId);
+      if(idx>=0) delete state.entries[idx].recurringRuleId;
+    }
+  }
+
+  if(entry.type==='income'){
+    assignIncomeToRecurring(state.entries.find(e => e.id===entry.id) || entry);
+  }
+  saveState();
+  setSaveToast('Saved');
+  resetForm();
+  renderAll();
+  switchTab('transactions');
+}
+
+function resetForm(){
+  ui.editingId = null;
+  ui.editingRecurringId = null;
+  $('entryFormTitle').textContent = 'Add entry';
+  $('editingHint').textContent = '';
+  $('type').value = 'expense';
+  $('date').value = todayStr();
+  $('title').value = '';
+  $('amount').value = '';
+  $('currency').value = 'CAD';
+  $('fxRate').value = 1;
+  $('category').value = state.settings.categories[0];
+  $('paymentMethod').value = state.settings.paymentMethods[0];
+  $('notes').value = '';
+  $('splitEnabled').checked = false;
+  $('recurringEnabled').checked = false;
+  ui.splitMode = 'custom';
+  updateSplitModeBtns();
+  renderSplitRows([]);
+  toggleSplit(); toggleRecurring();
+  $('cancelEditBtn').classList.add('hidden');
+}
+function toggleSplit(){
+  $('splitBox').classList.toggle('hidden', !$('splitEnabled').checked);
+  $('splitEven').classList.toggle('hidden', ui.splitMode!=='even' || !$('splitEnabled').checked);
+  // Keep people rows visible in both modes so names and modes can be edited.
+  $('splitCustom').classList.toggle('hidden', !$('splitEnabled').checked);
+}
+function toggleRecurring(){ $('recurringBox').classList.toggle('hidden', !$('recurringEnabled').checked); }
+function updateSplitModeBtns(){
+  $('splitCustomBtn').classList.toggle('primary', ui.splitMode==='custom');
+  $('splitEvenBtn').classList.toggle('primary', ui.splitMode==='even');
+}
+function fillEvenGeneratedRows(){
+  const count = Number($('evenPeopleCount').value||0);
+  const includeSelf = $('includeSelf').value==='yes';
+  const amount = Number((Number($('amount').value||0) * Number($('fxRate').value||1)).toFixed(2));
+  if(count<2 || amount<=0){ alert('Enter an amount and at least 2 people.'); return; }
+  const share = Number((amount / count).toFixed(2));
+  const owedCount = includeSelf ? count-1 : count;
+  const existing = collectSplitRows();
+  const rows = [];
+  for(let i=0;i<owedCount;i++){
+    const old = existing[i] || {};
+    rows.push({
+      id: old.id || uid(),
+      person: old.person || '',
+      amountCad: share,
+      remainingCad: old.mode==='credit' ? 0 : Number(old.remainingCad ?? share),
+      repaid: !!old.repaid,
+      mode: old.mode || 'charge',
+      prepaidBalanceCad: Number(old.prepaidBalanceCad || 0)
+    });
+  }
+  renderSplitRows(rows);
+  ui.splitMode='even';
+  updateSplitModeBtns();
+  toggleSplit();
+}
+
+function syncRecurringRuleSplits(ruleId){
+  const rule = state.recurringRules.find(r => r.id===ruleId);
+  if(!rule) return;
+  const template = clone(rule.splitsTemplate || []);
+  const byPerson = new Map(template.map(s => [(s.person||'').trim().toLowerCase(), s]));
+  state.entries.forEach(e => {
+    if(e.recurringRuleId !== ruleId) return;
+    if(!(e.splits && e.splits.length)) return;
+    e.splitMode = rule.splitMode || e.splitMode;
+    e.evenPeopleCount = rule.evenPeopleCount ?? e.evenPeopleCount;
+    e.includeSelf = rule.includeSelf ?? e.includeSelf;
+    e.splits = e.splits.map(es => {
+      const key = (es.person||'').trim().toLowerCase();
+      const ts = byPerson.get(key);
+      if(!ts) return es;
+      const merged = {...es, ...ts};
+      if(merged.mode==='nocharge'){ merged.amountCad = 0; merged.remainingCad = 0; merged.repaid = true; }
+      else if(merged.mode==='mine'){ merged.remainingCad = 0; merged.repaid = true; }
+      else if(merged.mode==='credit'){
+        merged.remainingCad = 0;
+        merged.repaid = false;
+      }
+      return merged;
+    });
+  });
+}
+
+function getEffectiveSplitStatus(entry, s){
+  const out = { ...s };
+  const amount = Number(out.amountCad || 0);
+  const remaining = Number(out.remainingCad ?? amount);
+  const prepaidBal = Number(out.prepaidBalanceCad || 0);
+  out._displayRemaining = remaining;
+  out._prepaidRemaining = prepaidBal;
+  out._needsRecharge = false;
+
+  if(out.mode==='credit'){
+    if(entry.recurringRuleId){
+      const tl = getCreditTimeline(entry.recurringRuleId, out.person);
+      const rec = tl.map[entry.id];
+      if(rec){
+        out._displayRemaining = Number(rec.owed||0);
+        out._prepaidRemaining = Number(rec.prepaidRemaining||0);
+        out._needsRecharge = !!rec.needsRecharge;
+        out.repaid = !!rec.covered;
+        return out;
+      }
+    }
+    const cycleDate = entry.date;
+    if(out.prepaidUntil && compareDate(cycleDate, out.prepaidUntil) <= 0){
+      out._displayRemaining = 0;
+      out._prepaidRemaining = prepaidBal;
+      out.repaid = true;
+      return out;
+    }
+    if(prepaidBal > 0){
+      const after = Number((prepaidBal - amount).toFixed(2));
+      if(after >= 0){
+        out._displayRemaining = 0;
+        out._prepaidRemaining = after;
+        out._needsRecharge = after <= 0.009;
+        out.repaid = true;
+        return out;
+      } else {
+        out._displayRemaining = Math.abs(after);
+        out._prepaidRemaining = 0;
+        out._needsRecharge = true;
+        out.repaid = false;
+        return out;
+      }
+    }
+    out._displayRemaining = remaining > 0 ? remaining : amount;
+    out._prepaidRemaining = 0;
+    out._needsRecharge = true;
+    out.repaid = false;
+    return out;
+  }
+
+  if(out.mode==='nocharge' || out.mode==='mine'){
+    out._displayRemaining = 0;
+    out.repaid = true;
+    return out;
+  }
+  return out;
+}
+
+function assignIncomeToRecurring(entry){
+  const relatedRules = state.recurringRules.filter(r => (r.title||'').trim().toLowerCase() === (entry.title||'').trim().toLowerCase() || (entry.title||'').toLowerCase().includes((r.title||'').toLowerCase()));
+  if(!relatedRules.length) return false;
+  const rule = relatedRules[0];
+  const creditPeople = (rule.splitsTemplate||[]).filter(s => s.mode==='credit');
+  if(!creditPeople.length) return false;
+  const names = creditPeople.map(s => s.person).filter(Boolean).join(', ');
+  const ok = confirm(`Assign this income to prepaid balances for ${rule.title}?\nPeople: ${names}`);
+  if(!ok) return false;
+
+  const total = Number(entry.amountCad || 0);
+  const explicitTotal = creditPeople.reduce((sum,s) => sum + Number(s.amountCad||0), 0);
+  const evenAmount = creditPeople.length ? Number((total / creditPeople.length).toFixed(2)) : 0;
+
+  creditPeople.forEach(s => {
+    const add = explicitTotal > 0 ? Number(s.amountCad||0) : evenAmount;
+    s.prepaidBalanceCad = Number((Number(s.prepaidBalanceCad||0) + add).toFixed(2));
+  });
+
+  state.annualAssignments.push({
+    id: uid(),
+    incomeEntryId: entry.id,
+    recurringRuleId: rule.id,
+    amountCad: total,
+    assignedAt: todayStr()
+  });
+  syncRecurringRuleSplits(rule.id);
+  return true;
+}
+
+function renderPeople(){
+  const people = {};
+  const ensurePerson = (name) => {
+    if(!people[name]) people[name] = { name, outstanding:0, prepaidRemaining:0, needsRecharge:false, owedItems:[], coveredGroups:{}, settledItems:[] };
+    return people[name];
+  };
+
+  // Non-credit items come from posted entries only, and only past/current dates.
+  for(const e of state.entries){
+    if(compareDate(e.date, todayStr()) > 0) continue;
+    for(const s of (e.splits||[])){
+      const name = (s.person||'').trim();
+      if(!name) continue;
+      if(s.mode==='mine' || s.mode==='nocharge' || s.mode==='credit') continue;
+      const p = ensurePerson(name);
+      const eff = getEffectiveSplitStatus(e, s);
+      if(Number(eff._displayRemaining||0) > 0){
+        p.outstanding += Number(eff._displayRemaining||0);
+        p.owedItems.push({
+          entryId:e.id, title:e.title, date:e.date, splitId:s.id,
+          amountCad:Number(s.amountCad||0), remainingCad:Number(eff._displayRemaining||0),
+          prepaidRemaining:0, repaid:false, mode:s.mode, needsRecharge:false
+        });
+      } else if(s.repaid){
+        p.settledItems.push({
+          entryId:e.id, title:e.title, date:e.date, splitId:s.id,
+          amountCad:Number(s.amountCad||0), remainingCad:0, prepaidRemaining:0, repaid:true, mode:s.mode, needsRecharge:false
+        });
+      }
+    }
+  }
+
+  // Credit/prepaid items are grouped from recurring rules, not from individual generated entries.
+  for(const rule of state.recurringRules){
+    for(const s of (rule.splitsTemplate||[])){
+      const name = (s.person||'').trim();
+      if(!name || s.mode!=='credit') continue;
+      const p = ensurePerson(name);
+      const summary = getCreditSummary(rule.id, name);
+      p.prepaidRemaining = Math.max(p.prepaidRemaining, Number(summary.prepaidRemaining||0));
+      if(summary.needsRecharge || summary.owedItems.length) p.needsRecharge = true;
+
+      if(summary.coveredCount > 0){
+        const key = `${rule.id}__${name}`;
+        p.coveredGroups[key] = {
+          title: rule.title || 'Recurring',
+          count: summary.coveredCount,
+          latestDate: summary.latestCoveredDate,
+          prepaidRemaining: Number(summary.prepaidRemaining||0)
+        };
+      }
+
+      for(const owed of summary.owedItems){
+        p.outstanding += Number(owed.amountCad||0);
+        p.owedItems.push({
+          entryId:`credit-${rule.id}-${owed.date}-${name}`,
+          title: rule.title || 'Recurring',
+          date: owed.date,
+          splitId:`credit-${rule.id}-${owed.date}-${name}`,
+          amountCad:Number(s.amountCad||0),
+          remainingCad:Number(owed.amountCad||0),
+          prepaidRemaining:Number(summary.prepaidRemaining||0),
+          repaid:false,
+          mode:'credit',
+          needsRecharge:true
+        });
+      }
+    }
+  }
+
+  const names = Object.keys(people).sort((a,b)=>people[b].outstanding-people[a].outstanding || people[b].prepaidRemaining-people[a].prepaidRemaining);
+  if(!names.length){ $('peopleList').innerHTML = `<div class="small">No people balances yet.</div>`; return; }
+  $('peopleList').innerHTML = names.map(name => {
+    const p = people[name];
+    const owed = p.owedItems.sort((a,b)=>a.date>b.date?1:-1);
+    const preview = owed.slice(0,3);
+    return `<div class="item">
+      <div class="row between">
+        <div>
+          <div><strong>${esc(name)}</strong> ${p.prepaidRemaining>0?'<span class="badge">prepaid</span>':''} ${p.needsRecharge?'<span class="badge">needs recharge</span>':''}</div>
+          <div class="small">Outstanding ${fmt(p.outstanding)} • Prepaid remaining ${fmt(p.prepaidRemaining)}</div>
+        </div>
+      </div>
+
+      ${owed.length ? `<div style="margin-top:8px">
+        <div class="small" style="margin-bottom:6px">Needs action</div>
+        ${preview.map(it => personItemHtml(name,it)).join('')}
+        ${owed.length>3 ? `
+          <div class="row" style="margin-top:8px">
+            <button type="button" onclick="togglePersonAll('${jsEsc(name)}')">${ui.expandedPeople[name] ? 'Hide extra items' : 'Show all'} (${owed.length})</button>
+          </div>
+          <div id="person-all-${slug(name)}" class="${ui.expandedPeople[name] ? '' : 'hidden'}">${owed.slice(3).map(it => personItemHtml(name,it)).join('')}</div>
+        ` : ''}
+      </div>` : ''}
+
+      ${Object.keys(p.coveredGroups).length ? `<div style="margin-top:12px">
+        <div class="small" style="margin-bottom:6px">Covered by prepaid</div>
+        ${Object.values(p.coveredGroups).map(g => `<div class="card" style="margin:8px 0 0;padding:10px">
+            <div class="row between">
+              <div>
+                <div>${esc(g.title)}</div>
+                <div class="small">${g.count} month${g.count===1?'':'s'} covered • through ${esc(g.latestDate)}</div>
+              </div>
+              <div style="text-align:right">
+                <div>Prepaid ${fmt(g.prepaidRemaining)}</div>
+                <div class="small">Covered by prepaid</div>
+              </div>
+            </div>
+          </div>`).join('')}
+      </div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function slug(s){ return String(s).toLowerCase().replace(/[^a-z0-9]+/g,'-'); }
+window.togglePersonAll = (name) => {
+  ui.expandedPeople[name] = !ui.expandedPeople[name];
+  renderPeople();
+};
+function personItemHtml(name,it){
+  const canRepay = (it.mode==='charge' || it.mode==='credit') && it.remainingCad>0;
+  return `<div class="card" style="margin:8px 0 0;padding:10px">
+    <div class="row between">
+      <div>
+        <div>${esc(it.title)}</div>
+        <div class="small">${esc(it.date)} • ${esc(it.mode)} ${it.needsRecharge ? '• needs recharge' : ''}</div>
+      </div>
+      <div style="text-align:right">
+        <div>${it.mode==='credit' ? `Prepaid ${fmt(it.prepaidRemaining)}${it.remainingCad>0 ? ` • owes ${fmt(it.remainingCad)}` : ''}` : fmt(it.remainingCad || it.amountCad)}</div>
+        ${canRepay ? `<button type="button" class="good" onclick="markRepaidPrompt('${jsEsc(name)}','${it.entryId}','${it.splitId}')">Mark repaid</button>` : `<span class="small">${it.repaid?'Repaid':it.mode==='credit' ? (it.needsRecharge ? 'Needs recharge' : 'Covered by prepaid') : it.mode==='nocharge'?'No charge':'My share'}</span>`}
+      </div>
+    </div>
+  </div>`;
+}
+window.markRepaidPrompt = (name, entryId, splitId) => {
+  const e = state.entries.find(x=>x.id===entryId); if(!e) return;
+  const s = (e.splits||[]).find(x=>x.id===splitId); if(!s) return;
+  const remaining = Number(s.remainingCad ?? s.amountCad ?? 0);
+  const input = prompt(`How much did ${name} repay? Remaining is ${remaining.toFixed(2)} CAD`, remaining.toFixed(2));
+  if(input===null) return;
+  const paid = Number(input||0);
+  if(!(paid>0)) return;
+  s.history = Array.isArray(s.history) ? s.history : [];
+  const incomeId = uid();
+  s.history.push({ id: uid(), ts: todayStr(), amountCad: paid, linkedIncomeEntryId: incomeId });
+  s.remainingCad = Math.max(0, Number((remaining - paid).toFixed(2)));
+  if(s.remainingCad<=0.009){ s.repaid = true; s.remainingCad = 0; }
+  if(s.remainingCad < Number(s.amountCad||0)) s.linkedIncomeEntryId = incomeId;
+  // auto money-in entry (option B)
+  state.entries.push({
+    id: incomeId,
+    type:'income',
+    date: todayStr(),
+    title: `${name} repaid you`,
+    originalAmount: paid,
+    currency:'CAD',
+    fxRate:1,
+    amountCad: paid,
+    category:'Income',
+    paymentMethod:'E-Transfer',
+    notes:`Auto-created repayment for ${e.title}`,
+    linkedSourceEntryId: e.id,
+    linkedSourceSplitId: s.id,
+    linkedRecurringRuleId: e.recurringRuleId || null
+  });
+  saveState();
+  renderAll();
+};
+
+
+function renderRecurring(){
+  const monthK = selectedMonthKey();
+  if(!state.recurringRules.length){ $('recurringList').innerHTML = `<div class="small">No recurring rules yet.</div>`; return; }
+  $('recurringList').innerHTML = state.recurringRules.map(r => {
+    const occ = occurrencesInPeriod(r, 'month', monthK);
+    const projected = occ.length ? occ.map(d => {
+      const exists = state.entries.find(e=>e.recurringRuleId===r.id && e.date===d);
+      return exists ? 'posted' : 'estimated';
+    }).join(', ') : 'not due';
+    const rechargeCount = (r.splitsTemplate||[]).filter(s => s.mode==='credit' && Number(s.prepaidBalanceCad||0) <= 0.009).length;
+    const badges = [
+      r.interval ? `<span class="badge">${esc(r.interval)}</span>` : '',
+      r.ruleType ? `<span class="badge">${esc(r.ruleType)}</span>` : '',
+      rechargeCount ? `<span class="badge">${rechargeCount} need recharge</span>` : ''
+    ].join(' ');
+    return `<div class="item">
+      <div class="row between">
+        <div>
+          <div><strong>${esc(r.title)}</strong> ${badges}</div>
+          <div class="small">${fmt(r.amountCad||0)} • ${esc(r.category||'')} • starts ${esc(r.startDate||'')}</div>
+          <div class="small">Selected month: ${projected}</div>
+        </div>
+        <div class="row wrap" style="justify-content:flex-end">
+          ${r.ruleType==='variable' ? `<button type="button" onclick="createVariableEntry('${r.id}')">Create for selected period</button>`:''}
+          <button type="button" onclick="editRule('${r.id}')">Edit rule</button>
+          <button type="button" class="danger" onclick="deleteRule('${r.id}')">Delete</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+window.createVariableEntry = (ruleId) => {
+  const r = state.recurringRules.find(x=>x.id===ruleId); if(!r) return;
+  const date = startOfMonth(ui.selectedDate);
+  ui.editingId = null;
+  ui.editingRecurringId = r.id;
+  $('entryFormTitle').textContent = 'Create variable bill';
+  $('editingHint').textContent = 'Prefilled from recurring template';
+  $('type').value = r.type || 'expense';
+  $('date').value = date;
+  $('title').value = r.title || '';
+  $('amount').value = r.originalAmount || (r.lastAmountCad || r.amountCad || '');
+  $('currency').value = r.currency || 'CAD';
+  $('fxRate').value = r.fxRate || 1;
+  $('category').value = r.category || state.settings.categories[0];
+  $('paymentMethod').value = r.paymentMethod || state.settings.paymentMethods[0];
+  $('notes').value = r.notes || '';
+  $('splitEnabled').checked = !!(r.splitsTemplate && r.splitsTemplate.length);
+  ui.splitMode = r.splitMode || 'custom';
+  updateSplitModeBtns();
+  renderSplitRows(clone((r.splitsTemplate||[]).map(s => ({...s, prepaidBalanceCad: Number(s.prepaidBalanceCad||0)}))));
+  $('evenPeopleCount').value = r.evenPeopleCount || 2;
+  $('includeSelf').value = r.includeSelf ? 'yes':'no';
+  toggleSplit();
+  $('recurringEnabled').checked = true;
+  $('recurringType').value = r.ruleType || 'variable';
+  $('recurringInterval').value = r.interval || 'monthly';
+  $('recurringStart').value = r.startDate || date;
+  $('recurringEnd').value = r.endDate || '';
+  toggleRecurring();
+  switchTab('add');
+};
+window.editRule = (ruleId) => {
+  const r = state.recurringRules.find(x=>x.id===ruleId); if(!r) return;
+  ui.editingId = null;
+  ui.editingRecurringId = r.id;
+  $('entryFormTitle').textContent = 'Edit recurring rule';
+  $('editingHint').textContent = 'Saving updates this recurring rule';
+  $('type').value = r.type || 'expense';
+  $('date').value = r.startDate || todayStr();
+  $('title').value = r.title || '';
+  $('amount').value = r.originalAmount || r.amountCad || '';
+  $('currency').value = r.currency || 'CAD';
+  $('fxRate').value = r.fxRate || 1;
+  $('category').value = r.category || state.settings.categories[0];
+  $('paymentMethod').value = r.paymentMethod || state.settings.paymentMethods[0];
+  $('notes').value = r.notes || '';
+  $('splitEnabled').checked = !!(r.splitsTemplate && r.splitsTemplate.length);
+  ui.splitMode = r.splitMode || 'custom';
+  updateSplitModeBtns();
+  renderSplitRows(clone((r.splitsTemplate||[]).map(s => ({...s, prepaidBalanceCad: Number(s.prepaidBalanceCad||0)}))));
+  $('evenPeopleCount').value = r.evenPeopleCount || 2;
+  $('includeSelf').value = r.includeSelf ? 'yes':'no';
+  toggleSplit();
+  $('recurringEnabled').checked = true;
+  $('recurringType').value = r.ruleType || 'fixed';
+  $('recurringInterval').value = r.interval || 'monthly';
+  $('recurringStart').value = r.startDate || todayStr();
+  $('recurringEnd').value = r.endDate || '';
+  toggleRecurring();
+  $('cancelEditBtn').classList.remove('hidden');
+  switchTab('add');
+};
+window.deleteRule = (ruleId) => {
+  if(!confirm('Delete this recurring rule and its generated transactions/repayments?')) return;
+  const relatedEntries = state.entries.filter(e => e.recurringRuleId===ruleId);
+  const relatedEntryIds = new Set(relatedEntries.map(e => e.id));
+  const relatedTitles = new Set(relatedEntries.map(e => e.title));
+  const repaymentIncomeIds = new Set();
+
+  for(const e of relatedEntries){
+    for(const s of (e.splits||[])){
+      if(s.linkedIncomeEntryId) repaymentIncomeIds.add(s.linkedIncomeEntryId);
+      for(const h of (s.history||[])){
+        if(h.linkedIncomeEntryId) repaymentIncomeIds.add(h.linkedIncomeEntryId);
+      }
+    }
+  }
+
+  state.recurringRules = state.recurringRules.filter(r=>r.id!==ruleId);
+  state.annualAssignments = (state.annualAssignments||[]).filter(a => a.recurringRuleId !== ruleId);
+  state.entries = state.entries.filter(e => {
+    if(e.recurringRuleId===ruleId) return false;
+    if(repaymentIncomeIds.has(e.id)) return false;
+    if(e.type==='income' && e.linkedRecurringRuleId===ruleId) return false;
+    if(e.type==='income' && e.linkedSourceEntryId && relatedEntryIds.has(e.linkedSourceEntryId)) return false;
+    if(e.type==='income' && typeof e.notes==='string' && Array.from(relatedTitles).some(t => e.notes === `Auto-created repayment for ${t}`)) return false;
+    return true;
+  });
+
+  saveState();
+  renderAll();
+};
+
+
+function renderGraph(){
+  const canvas = $('graph');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = 250 * dpr;
+  ctx.scale(dpr,dpr);
+  const w = rect.width, h = 250;
+  ctx.clearRect(0,0,w,h);
+
+  let months = [];
+  if(ui.mode==='month'){
+    const start = addMonths(startOfMonth(ui.selectedDate), -2);
+    for(let i=0;i<6;i++) months.push(ymKey(addMonths(start, i)));
+  } else {
+    const y = selectedYearKey();
+    for(let m=1;m<=12;m++) months.push(`${y}-${String(m).padStart(2,'0')}`);
+  }
+  const data = months.map(k => {
+    const postedIncome = state.entries.filter(e=>ymKey(e.date)===k && e.type==='income').reduce((s,e)=>s+Number(e.amountCad||0),0);
+    const postedOut = state.entries.filter(e=>ymKey(e.date)===k && e.type==='expense').reduce((s,e)=>s+Number(e.amountCad||0),0);
+    // Only add projection where there is no posted fixed recurring instance for that occurrence.
+    const projOut = projectedRecurringForPeriod('month', k)
+      .filter(x=>x.rule.type==='expense' || !x.rule.type)
+      .reduce((s,x)=>s+Number(x.amountCad||0),0);
+    return { k, label: monthLabelFromKey(k).split(' ')[0], postedIncome, postedOut, projOut };
+  });
+  const maxVal = Math.max(1, ...data.map(x=>Math.max(x.postedIncome, x.postedOut + x.projOut)));
+  const chartPad = {left:36,right:10,top:10,bottom:36};
+  const cw = w-chartPad.left-chartPad.right, ch = h-chartPad.top-chartPad.bottom;
+  ctx.strokeStyle = '#334155'; ctx.lineWidth=1;
+  for(let i=0;i<=4;i++){
+    const y = chartPad.top + ch*(i/4);
+    ctx.beginPath(); ctx.moveTo(chartPad.left,y); ctx.lineTo(w-chartPad.right,y); ctx.stroke();
+    const val = maxVal*(1-i/4);
+    ctx.fillStyle='#94a3b8'; ctx.font='11px sans-serif';
+    ctx.fillText(shortFmt(val), 2, y+4);
+  }
+  const groupW = cw / data.length;
+  ui.graphBars = [];
+  data.forEach((d,i) => {
+    const gx = chartPad.left + i*groupW + groupW*0.14;
+    const bw = Math.max(8, groupW*0.24);
+    const incomeH = (d.postedIncome/maxVal)*ch;
+    const outH = (d.postedOut/maxVal)*ch;
+    const projH = (d.projOut/maxVal)*ch;
+
+    // income
+    const incomeX = gx;
+    const incomeY = chartPad.top + ch - incomeH;
+    ctx.fillStyle = '#60a5fa';
+    ctx.fillRect(incomeX, incomeY, bw, incomeH);
+
+    // posted out
+    const outX = gx + bw + groupW*0.08;
+    const outY = chartPad.top + ch - outH;
+    ctx.fillStyle = '#f87171';
+    ctx.fillRect(outX, outY, bw, outH);
+
+    // projected stacked on top of posted out
+    let projY = outY, projRectH = 0;
+    if(projH>0){
+      projY = chartPad.top + ch - outH - projH;
+      projRectH = projH;
+      const pat = ctx.createPattern(makeStripeCanvas(), 'repeat');
+      ctx.fillStyle = pat;
+      ctx.fillRect(outX, projY, bw, projH);
+      ctx.strokeStyle = '#f59e0b';
+      ctx.strokeRect(outX, projY, bw, projH);
+    }
+
+    ctx.fillStyle='#cbd5e1'; ctx.font='12px sans-serif';
+    ctx.textAlign='center';
+    ctx.fillText(d.label, chartPad.left + i*groupW + groupW/2, h-14);
+    // only make actual bars clickable
+    ui.graphBars.push(
+      {x:incomeX, y:incomeY, width:bw, height:incomeH, key:d.k},
+      {x:outX, y:projH>0?projY:outY, width:bw, height:outH+projRectH, key:d.k}
+    );
+  });
+  ctx.textAlign='left';
+}
+
+function makeStripeCanvas(){
+  const c = document.createElement('canvas'); c.width=8; c.height=8;
+  const x = c.getContext('2d');
+  x.fillStyle='#f59e0b'; x.fillRect(0,0,8,8);
+  x.strokeStyle='#1f2937'; x.lineWidth=3;
+  x.beginPath(); x.moveTo(-2,8); x.lineTo(8,-2); x.stroke();
+  x.beginPath(); x.moveTo(2,10); x.lineTo(10,2); x.stroke();
+  return c;
+}
+
+function handleGraphTap(ev){
+  if(Date.now() - (ui.lastControlTap || 0) < 500) return;
+  const rect = $('graph').getBoundingClientRect();
+  const x = ev.clientX - rect.left;
+  const y = (ev.clientY || 0) - rect.top;
+  if(x < 0 || x > rect.width || y < 0 || y > rect.height) return;
+  const hit = ui.graphBars.find(b =>
+    x>=b.x && x<=b.x+b.width &&
+    y>=b.y && y<=b.y+b.height &&
+    b.height > 12
+  );
+  if(hit){
+    ui.mode='month';
+    ui.selectedDate = `${hit.key}-01`;
+    updateModeButtons();
+    switchTab('transactions');
+    renderAll();
+  }
+}
+
+
+function renderSettings(){
+  $('yourName').value = state.settings.yourName || 'Macks';
+}
+
+function exportJson(){
+  const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
+  downloadBlob(blob, `expense-tracker-backup-${todayStr()}.json`);
+}
+function exportCsv(){
+  const rows = [['id','date','type','title','amount_cad','original_amount','currency','fx_rate','category','payment_method','notes','recurring_rule_id','split_people','split_outstanding']];
+  state.entries.forEach(e => {
+    rows.push([
+      e.id, e.date, e.type, e.title, e.amountCad, e.originalAmount||'', e.currency||'CAD', e.fxRate||1, e.category||'', e.paymentMethod||'', (e.notes||'').replace(/\n/g,' '),
+      e.recurringRuleId||'', (e.splits||[]).map(s=>s.person).join('; '), (e.splits||[]).reduce((s,x)=>s+Number(x.remainingCad||0),0)
+    ]);
+  });
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  downloadBlob(new Blob([csv], {type:'text/csv'}), `expense-tracker-${todayStr()}.csv`);
+}
+function downloadBlob(blob, filename){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+function importJsonText(text){
+  try{
+    const data = migrateIfNeeded(JSON.parse(text));
+    if(!confirm('Import this backup and replace current app data?')) return;
+    state = data;
+    saveState(false);
+    renderAll();
+    alert('Import complete.');
+  } catch(e){ alert('Could not import JSON.'); }
+}
+function restoreAuto(){
+  try{
+    const arr = JSON.parse(localStorage.getItem(AUTO_KEY)||'[]');
+    if(!arr.length){ alert('No auto backups found.'); return; }
+    if(!confirm('Restore latest auto backup?')) return;
+    state = migrateIfNeeded(arr[0].data);
+    saveState(false);
+    renderAll();
+  } catch(e){ alert('No auto backups found.'); }
+}
+
+function switchTab(tab){
+  ui.tab = tab;
+  document.querySelectorAll('.tab').forEach(el => el.classList.add('hidden'));
+  $('tab-'+tab).classList.remove('hidden');
+  document.querySelectorAll('.nav button').forEach(btn => btn.classList.toggle('active', btn.dataset.tab===tab));
+}
+function updateModeButtons(){
+  $('modeMonthBtn').classList.toggle('primary', ui.mode==='month');
+  $('modeYearBtn').classList.toggle('primary', ui.mode==='year');
+  $('periodLabel').textContent = currentPeriodLabel();
+}
+function changePeriod(dir){
+  if(ui.mode==='month') ui.selectedDate = addMonths(startOfMonth(ui.selectedDate), dir);
+  else ui.selectedDate = `${Number(selectedYearKey())+dir}-01-01`;
+  renderAll();
+}
+
+function renderAll(){
+  const changed = ensureRecurringEntriesToToday();
+  updateModeButtons();
+  renderSummaryCards();
+  renderTransactions();
+  renderPeople();
+  renderRecurring();
+  renderSettings();
+  renderGraph();
+  if(changed) saveState(false);
+}
+
+function bind(){
+  document.querySelectorAll('.nav button').forEach(btn => btn.addEventListener('click', ()=>switchTab(btn.dataset.tab)));
+  $('modeMonthBtn').addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); ui.lastControlTap = Date.now(); ui.mode='month'; renderAll(); });
+  $('modeYearBtn').addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); ui.lastControlTap = Date.now(); ui.mode='year'; renderAll(); });
+  $('prevPeriodBtn').addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); ui.lastControlTap = Date.now(); changePeriod(-1); });
+  $('nextPeriodBtn').addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); ui.lastControlTap = Date.now(); changePeriod(1); });
+  $('currency').addEventListener('change', ()=>{ $('fxRate').value = CAD_RATES[$('currency').value] || 1; });
+  $('saveEntryBtn').addEventListener('click', saveEntry);
+  $('cancelEditBtn').addEventListener('click', ()=>{ resetForm(); switchTab('transactions'); });
+  $('splitEnabled').addEventListener('change', toggleSplit);
+  $('recurringEnabled').addEventListener('change', toggleRecurring);
+  $('splitCustomBtn').addEventListener('click', ()=>{ ui.splitMode='custom'; updateSplitModeBtns(); toggleSplit(); });
+  $('splitEvenBtn').addEventListener('click', ()=>{
+    ui.splitMode='even';
+    updateSplitModeBtns();
+    toggleSplit();
+    if(!document.querySelectorAll('#splitRows .splitRow').length){
+      fillEvenGeneratedRows();
+    }
+  });
+  $('addSplitRowBtn').addEventListener('click', ()=>{ $('splitRows').insertAdjacentHTML('beforeend', splitRowHtml({id:uid(), mode:'charge'})); });
+  $('evenGenerateBtn').addEventListener('click', fillEvenGeneratedRows);
+  $('searchTx').addEventListener('input', renderTransactions);
+  $('filterCategory').addEventListener('change', renderTransactions);
+  $('filterType').addEventListener('change', renderTransactions);
+  $('txPrevBtn').addEventListener('click', ()=>changePeriod(-1));
+  $('txNextBtn').addEventListener('click', ()=>changePeriod(1));
+  $('txMonthBtn').addEventListener('click', ()=>{ ui.mode='month'; renderAll(); });
+  $('txYearBtn').addEventListener('click', ()=>{ ui.mode='year'; renderAll(); });
+  $('txUseDashboardBtn').addEventListener('click', ()=>{ switchTab('dashboard'); });
+  $('createForPeriodBtn').addEventListener('click', ()=> {
+    const vars = state.recurringRules.filter(r=>r.ruleType==='variable');
+    if(!vars.length){ alert('No variable recurring rules.'); return; }
+    createVariableEntry(vars[0].id);
+  });
+  $('addCategoryBtn').addEventListener('click', ()=> {
+    const v = $('newCategory').value.trim(); if(!v) return;
+    if(!state.settings.categories.includes(v)) state.settings.categories.push(v);
+    $('newCategory').value=''; saveState(false); renderCategorySelects(); $('category').value=v;
+  });
+  $('addPaymentMethodBtn').addEventListener('click', ()=> {
+    const v = $('newPaymentMethod').value.trim(); if(!v) return;
+    if(!state.settings.paymentMethods.includes(v)) state.settings.paymentMethods.push(v);
+    $('newPaymentMethod').value=''; saveState(false); renderPaymentMethodSelects(); $('paymentMethod').value=v;
+  });
+  $('yourName').addEventListener('change', ()=>{ state.settings.yourName = $('yourName').value.trim() || 'Macks'; saveState(false); });
+  $('backupJsonBtn').addEventListener('click', exportJson);
+  $('exportCsvBtn').addEventListener('click', exportCsv);
+  $('importJsonBtn').addEventListener('click', ()=>$('importJsonFile').click());
+  $('importJsonFile').addEventListener('change', (e) => {
+    const file = e.target.files[0]; if(!file) return;
+    const reader = new FileReader();
+    reader.onload = () => importJsonText(reader.result);
+    reader.readAsText(file);
+  });
+  $('restoreAutoBtn').addEventListener('click', restoreAuto);
+  $('graph').addEventListener('click', handleGraphTap);
+  $('graph').addEventListener('touchend', (e) => {
+    const touch = e.changedTouches[0];
+    handleGraphTap({clientX:touch.clientX});
+  }, {passive:true});
+}
+
+function init(){
+  populateStaticOptions();
+  bind();
+  resetForm();
+  renderAll();
+}
+init();
+})();
+</script>
+</body>
+</html>
