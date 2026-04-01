@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Macks Expense Tracker v8.8.8</title>
+<title>Macks Expense Tracker v9.0.0</title>
 <style>
 :root{
   --bg:#0f172a; --panel:#111827; --panel2:#1f2937; --text:#e5e7eb; --muted:#94a3b8; --accent:#38bdf8; --green:#22c55e; --red:#ef4444; --yellow:#f59e0b; --border:#334155;
@@ -113,10 +113,19 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
     </div>
     <canvas id="graph" height="250"></canvas>
     <div class="legend" style="margin-top:8px">
-      <span><span class="dot" style="background:#60a5fa"></span>Money in</span>
-      <span><span class="dot" style="background:#f87171"></span>Posted outflow</span>
-      <span><span class="dot" style="background:repeating-linear-gradient(45deg,#f59e0b,#f59e0b 4px,#1f2937 4px,#1f2937 8px)"></span>Projected recurring</span>
+      <span><span class="dot" style="background:#60a5fa"></span>Income</span>
+      <span><span class="dot" style="background:#f87171"></span>Expenses posted</span>
+      <span><span class="dot" style="background:repeating-linear-gradient(45deg,#f59e0b,#f59e0b 4px,#1f2937 4px,#1f2937 8px)"></span>Upcoming scheduled</span>
     </div>
+  </div>
+
+  <div class="card" id="dashboardCategoryCard">
+    <div class="row between">
+      <h3>Expense breakdown</h3>
+      <div class="small">By category for selected period</div>
+    </div>
+    <canvas id="categoryPie" height="250"></canvas>
+    <div id="categoryLegend" class="legend" style="margin-top:8px"></div>
   </div>
 </section>
 
@@ -270,9 +279,10 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
         <label><input id="dashShowGraph" type="checkbox" /> Graph</label>
         <label><input id="dashShowNeedsAction" type="checkbox" /> Needs action</label>
         <label><input id="dashShowPrepaid" type="checkbox" /> Prepaid summary</label>
+        <label><input id="dashShowCategory" type="checkbox" /> Expense breakdown chart</label>
       </div>
       <div style="margin-top:10px">
-        <label><input id="dashNeedsActionOnly" type="checkbox" /> Needs action only mode</label>
+        <label><input id="dashNeedsActionOnly" type="checkbox" /> Needs action only mode (keeps period controls, hides extra cards)</label>
       </div>
     </div>
     <hr class="sep" />
@@ -283,11 +293,11 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
       <button id="restoreAutoBtn" type="button">Restore latest auto backup</button>
       <input id="importJsonFile" type="file" accept=".json,application/json" class="hidden" />
     </div>
-    <div class="small" style="margin-top:10px">Version <strong>v8.8.8</strong> • Build <strong>1774126381</strong></div>
+    <div class="small" style="margin-top:10px">Version <strong>v9.0.0</strong> • Build <strong>1774126779</strong></div>
   </div>
 </section>
 
-<div class="version">v8.8.8</div>
+<div class="version">v9.0.0</div>
 
 <nav class="nav">
   <button data-tab="dashboard" class="active">Home</button>
@@ -366,6 +376,7 @@ function emptyState(){
         showGraph: true,
         showNeedsAction: true,
         showPrepaidSummary: true,
+        showCategoryChart: true,
         needsActionOnly: false
       }
     },
@@ -392,6 +403,7 @@ function migrateIfNeeded(data){
   if(data.settings.dashboard.showGraph === undefined) data.settings.dashboard.showGraph = true;
   if(data.settings.dashboard.showNeedsAction === undefined) data.settings.dashboard.showNeedsAction = true;
   if(data.settings.dashboard.showPrepaidSummary === undefined) data.settings.dashboard.showPrepaidSummary = true;
+  if(data.settings.dashboard.showCategoryChart === undefined) data.settings.dashboard.showCategoryChart = true;
   if(data.settings.dashboard.needsActionOnly === undefined) data.settings.dashboard.needsActionOnly = false;
 
   data.entries = Array.isArray(data.entries) ? data.entries : (Array.isArray(data.transactions) ? data.transactions : []);
@@ -875,30 +887,38 @@ function computePeriodSummary(){
   const income = actual.filter(e=>e.type==='income').reduce((s,e)=>s+Number(e.amountCad||0),0);
   const outflow = actual.filter(e=>e.type==='expense').reduce((s,e)=>s+Number(e.amountCad||0),0);
   const outstanding = actual.filter(e=>e.type==='expense' && compareDate(e.date, todayStr()) <= 0).flatMap(e => (e.splits||[]).map(s => getEffectiveSplitStatus(e, s))).filter(s=>!s.repaid && s.mode!=='mine' && s.mode!=='nocharge').reduce((sum,x)=>sum+Number(x._displayRemaining || 0),0);
+
   const recurringProjected = projectedRecurringForPeriod(ui.mode, ui.mode==='month' ? selectedMonthKey() : selectedYearKey())
     .filter(x=>x.rule.type==='expense' || !x.rule.type)
     .reduce((s,x)=>s+Number(x.amountCad||0),0);
-  const recurringThis = projectedRecurringForPeriod('month', selectedMonthKey()).reduce((s,x)=>s+Number(x.amountCad||0),0);
-  const nextMonthKey = ymKey(addMonths(startOfMonth(ui.selectedDate),1));
-  const recurringNext = projectedRecurringForPeriod('month', nextMonthKey).reduce((s,x)=>s+Number(x.amountCad||0),0);
-  const recurringYear = projectedRecurringForPeriod('year', selectedYearKey()).reduce((s,x)=>s+Number(x.amountCad||0),0)
-    + state.entries.filter(e=>yKey(e.date)===selectedYearKey() && e.recurringRuleId && e.type==='expense').reduce((s,e)=>s+Number(e.amountCad||0),0);
+
+  const periodStart = ui.mode==='month' ? startOfMonth(ui.selectedDate) : `${selectedYearKey()}-01-01`;
+  const beforePeriod = state.entries.filter(e => compareDate(e.date, periodStart) < 0);
+  const carryover = beforePeriod.reduce((sum,e)=>sum + (e.type==='income' ? Number(e.amountCad||0) : -Number(e.amountCad||0)), 0);
+
+  const actualToDate = actual.filter(e => compareDate(e.date, todayStr()) <= 0);
+  const currentPosition = carryover + actualToDate.reduce((sum,e)=>sum + (e.type==='income' ? Number(e.amountCad||0) : -Number(e.amountCad||0)), 0);
+
+  const upcomingScheduled = actual.filter(e => e.type==='expense' && compareDate(e.date, todayStr()) > 0).reduce((s,e)=>s+Number(e.amountCad||0),0)
+    + projectedRecurringForPeriod(ui.mode, ui.mode==='month' ? selectedMonthKey() : selectedYearKey())
+      .filter(x => compareDate(x.date, todayStr()) > 0)
+      .reduce((s,x)=>s+Number(x.amountCad||0),0);
+
   const rechargeDue = state.recurringRules.reduce((count,r) => count + (r.splitsTemplate||[]).filter(s => s.mode==='credit' && Number(s.prepaidBalanceCad||0) <= 0.009).length, 0);
-  const netSpend = outflow - outstanding;
-  return { income, outflow, outstanding, netSpend, recurringThis, recurringNext, recurringYear, recurringProjected, rechargeDue };
+  const net = income - outflow;
+  return { income, outflow, outstanding, net, carryover, currentPosition, upcomingScheduled, recurringProjected, rechargeDue };
 }
 
 function renderSummaryCards(){
   const s = computePeriodSummary();
   const cards = [
-    ['Money in', s.income, 'positive'],
-    ['Money out', s.outflow, 'negative'],
-    ['Net spend', s.netSpend, ''],
+    ['Income', s.income, 'positive'],
+    ['Expenses', s.outflow, 'negative'],
+    ['Net', s.net, ''],
     ['Still owed to you', s.outstanding, ''],
-    ['Recurring this month', s.recurringThis, ''],
-    ['Recurring next month', s.recurringNext, ''],
-    ['Recurring this year', s.recurringYear, ''],
-    ['Estimated recurring still due', s.recurringProjected, ''],
+    ['Carryover into period', s.carryover, ''],
+    ['Current position', s.currentPosition, ''],
+    ['Upcoming scheduled', s.upcomingScheduled, ''],
     ['Recharge reminders', s.rechargeDue, '']
   ];
   $('summaryCards').innerHTML = cards.map(([label,val,cls]) => `
@@ -938,7 +958,7 @@ function renderTransactions(){
       <div class="row between">
         <div>
           <div><strong>${esc(e.title)}</strong> <span class="badge">${esc(e.type)}</span></div>
-          <div class="small">${esc(e.date)} • ${esc(e.category||'')} • ${esc(e.paymentMethod||'')}</div>
+          <div class="small">${esc(e.date)} • ${compareDate(e.date, todayStr()) > 0 ? 'Upcoming' : 'Occurred'} • ${esc(e.category||'')} • ${esc(e.paymentMethod||'')}</div>
           ${fx}
           ${splitSummary}
           ${e.notes ? `<div class="small">${esc(e.notes)}</div>` : ''}
@@ -1990,19 +2010,17 @@ function getDashboardPeopleSummary(){
 
 function renderDashboardWidgets(){
   const cfg = state.settings.dashboard || {};
-  $('dashboardSummaryCard').classList.toggle('hidden', !cfg.showSummaryCards);
+  // Period controls stay visible at all times. Only the summary card body is configurable.
+  $('dashboardSummaryCard').classList.toggle('hidden', false);
+  $('summaryCards').classList.toggle('hidden', !cfg.showSummaryCards || !!cfg.needsActionOnly);
   $('dashboardGraphCard').classList.toggle('hidden', !cfg.showGraph);
   $('dashboardNeedsActionCard').classList.toggle('hidden', !cfg.showNeedsAction);
-  $('dashboardPrepaidCard').classList.toggle('hidden', !cfg.showPrepaidSummary);
+  $('dashboardPrepaidCard').classList.toggle('hidden', !cfg.showPrepaidSummary || !!cfg.needsActionOnly);
+  $('dashboardCategoryCard').classList.toggle('hidden', !cfg.showCategoryChart);
 
   const people = getDashboardPeopleSummary();
   const needs = people.filter(p=>p.outstanding>0);
   const prepaid = people.filter(p=>p.prepaidRemaining>0);
-
-  if(cfg.needsActionOnly){
-    $('dashboardPrepaidCard').classList.add('hidden');
-    $('dashboardSummaryCard').classList.toggle('hidden', true);
-  }
 
   $('dashboardNeedsAction').innerHTML = needs.length ? needs.slice(0,6).map(p => `
     <div class="card" style="margin:8px 0 0;padding:10px">
@@ -2035,6 +2053,69 @@ function renderDashboardWidgets(){
   `).join('') : `<div class="small">No prepaid balances to show.</div>`;
 }
 
+
+function renderCategoryPie(){
+  const canvas = $('categoryPie');
+  if(!canvas) return;
+  const rect = canvas.getBoundingClientRect();
+  if(rect.width === 0){
+    $('categoryLegend').innerHTML = '<div class="small">Chart hidden.</div>';
+    return;
+  }
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = rect.width * dpr;
+  canvas.height = 250 * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  const w = rect.width, h = 250;
+  ctx.clearRect(0,0,w,h);
+
+  const actual = state.entries.filter(inSelectedPeriod).filter(e => e.type==='expense' && compareDate(e.date, todayStr()) <= 0);
+  const byCat = {};
+  for(const e of actual){
+    byCat[e.category || 'Other'] = (byCat[e.category || 'Other'] || 0) + Number(e.amountCad || 0);
+  }
+  const items = Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
+  const total = items.reduce((s,x)=>s+x[1],0);
+  if(!items.length || total <= 0){
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '14px sans-serif';
+    ctx.fillText('No posted expenses in this period yet.', 16, 28);
+    $('categoryLegend').innerHTML = '';
+    return;
+  }
+
+  const cx = w * 0.35, cy = h * 0.5, radius = Math.min(w,h) * 0.28;
+  const shades = ['#60a5fa','#f87171','#34d399','#fbbf24','#a78bfa','#fb7185','#22c55e','#c084fc','#38bdf8','#f59e0b'];
+  let start = -Math.PI/2;
+  const legend = [];
+  items.forEach(([cat, val], i) => {
+    const angle = (val / total) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.fillStyle = shades[i % shades.length];
+    ctx.arc(cx, cy, radius, start, start + angle);
+    ctx.closePath();
+    ctx.fill();
+    start += angle;
+    legend.push(`<span><span class="dot" style="background:${shades[i % shades.length]}"></span>${esc(cat)} ${fmt(val)}</span>`);
+  });
+
+  ctx.beginPath();
+  ctx.fillStyle = '#0b1220';
+  ctx.arc(cx, cy, radius * 0.5, 0, Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = '#e5e7eb';
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 14px sans-serif';
+  ctx.fillText('Expenses', cx, cy - 4);
+  ctx.font = '12px sans-serif';
+  ctx.fillText(fmt(total), cx, cy + 16);
+  ctx.textAlign = 'left';
+
+  $('categoryLegend').innerHTML = legend.join('');
+}
+
 function renderSettings(){
   $('yourName').value = state.settings.yourName || 'Macks';
   const cfg = state.settings.dashboard || {};
@@ -2042,6 +2123,7 @@ function renderSettings(){
   $('dashShowGraph').checked = !!cfg.showGraph;
   $('dashShowNeedsAction').checked = !!cfg.showNeedsAction;
   $('dashShowPrepaid').checked = !!cfg.showPrepaidSummary;
+  $('dashShowCategory').checked = !!cfg.showCategoryChart;
   $('dashNeedsActionOnly').checked = !!cfg.needsActionOnly;
 }
 
@@ -2114,8 +2196,9 @@ function renderAll(){
   renderPeople();
   renderRecurring();
   renderSettings();
-  renderGraph();
   renderDashboardWidgets();
+  renderGraph();
+  renderCategoryPie();
   if(changed) saveState(false);
 }
 
@@ -2161,6 +2244,7 @@ function bind(){
   bindDashSetting('dashShowGraph', 'showGraph');
   bindDashSetting('dashShowNeedsAction', 'showNeedsAction');
   bindDashSetting('dashShowPrepaid', 'showPrepaidSummary');
+  bindDashSetting('dashShowCategory', 'showCategoryChart');
   bindDashSetting('dashNeedsActionOnly', 'needsActionOnly');
   $('createForPeriodBtn').addEventListener('click', ()=> {
     const vars = state.recurringRules.filter(r=>r.ruleType==='variable');
@@ -2188,6 +2272,8 @@ function bind(){
     reader.readAsText(file);
   });
   $('restoreAutoBtn').addEventListener('click', restoreAuto);
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) renderAll(); });
+  window.addEventListener('focus', ()=>renderAll());
   $('graph').addEventListener('click', handleGraphTap);
   $('graph').addEventListener('touchend', (e) => {
     const touch = e.changedTouches[0];
