@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Macks Expense Tracker v9.0.5</title>
+<title>Macks Expense Tracker v9.0.6</title>
 <style>
 :root{
   --bg:#0f172a; --panel:#111827; --panel2:#1f2937; --text:#e5e7eb; --muted:#94a3b8; --accent:#38bdf8; --green:#22c55e; --red:#ef4444; --yellow:#f59e0b; --border:#334155;
@@ -301,11 +301,11 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
       <button id="restoreAutoBtn" type="button">Restore latest auto backup</button>
       <input id="importJsonFile" type="file" accept=".json,application/json" class="hidden" />
     </div>
-    <div class="small" style="margin-top:10px">Version <strong>v9.0.5</strong> • Build <strong>1775229714</strong></div>
+    <div class="small" style="margin-top:10px">Version <strong>v9.0.6</strong> • Build <strong>1775367658</strong></div>
   </div>
 </section>
 
-<div class="version">v9.0.5</div>
+<div class="version">v9.0.6</div>
 
 <nav class="nav">
   <button data-tab="dashboard" class="active">Home</button>
@@ -425,6 +425,11 @@ function migrateIfNeeded(data){
   if(data.settings.balanceAnchor.date === undefined) data.settings.balanceAnchor.date = '';
   if(data.settings.balanceAnchor.amountCad === undefined) data.settings.balanceAnchor.amountCad = 0;
   if(data.settings.balanceAnchor.includeRepayments === undefined) data.settings.balanceAnchor.includeRepayments = true;
+
+  data.recurringRules = Array.isArray(data.recurringRules) ? data.recurringRules.map(r => ({
+    ...r,
+    deletedOccurrences: Array.isArray(r.deletedOccurrences) ? r.deletedOccurrences : []
+  })) : [];
 
   data.entries = Array.isArray(data.entries) ? data.entries : (Array.isArray(data.transactions) ? data.transactions : []);
   data.recurringRules = Array.isArray(data.recurringRules) ? data.recurringRules : (Array.isArray(data.recurring) ? data.recurring : (Array.isArray(data.rules) ? data.rules : []));
@@ -639,6 +644,7 @@ function projectedRecurringForPeriod(periodMode, key){
     const occ = occurrencesInPeriod(r, periodMode, key);
     if(!occ.length) continue;
     for(const date of occ){
+      if(isOccurrenceDeleted(r, date)) continue;
       const existing = state.entries.find(e => e.recurringRuleId===r.id && e.date===date);
       if(existing && r.ruleType==='fixed') continue;
       if(r.ruleType==='variable'){
@@ -656,6 +662,11 @@ function projectedRecurringForPeriod(periodMode, key){
 function getLastPostedFromRule(ruleId){
   return state.entries.filter(e => e.recurringRuleId===ruleId).sort((a,b)=>a.date<b.date?1:-1)[0];
 }
+
+function isOccurrenceDeleted(rule, date){
+  return Array.isArray(rule?.deletedOccurrences) && rule.deletedOccurrences.includes(date);
+}
+
 
 function cloneSplitTemplateForEntry(rule){
   return (rule.splitsTemplate||[]).map(s => ({
@@ -697,6 +708,7 @@ function ensureRecurringEntriesToToday(){
     if(rule.ruleType !== 'fixed') continue;
     const occ = occurrencesInRange(rule, rule.startDate, today);
     for(const date of occ){
+      if(isOccurrenceDeleted(rule, date)) continue;
       let existing = state.entries.find(e => e.recurringRuleId===rule.id && e.date===date && e.type===rule.type);
       if(!existing){
         existing = {
@@ -1070,7 +1082,20 @@ window.editEntry = (id) => {
 };
 
 window.deleteEntry = (id) => {
+  const entry = state.entries.find(e => e.id===id);
+  if(!entry) return;
   if(!confirm('Delete this transaction?')) return;
+
+  if(entry.recurringRuleId){
+    const rule = state.recurringRules.find(r => r.id===entry.recurringRuleId);
+    if(rule){
+      rule.deletedOccurrences = Array.isArray(rule.deletedOccurrences) ? rule.deletedOccurrences : [];
+      if(!rule.deletedOccurrences.includes(entry.date)){
+        rule.deletedOccurrences.push(entry.date);
+      }
+    }
+  }
+
   state.entries = state.entries.filter(e => e.id!==id);
   saveState();
   renderAll();
