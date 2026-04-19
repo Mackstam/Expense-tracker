@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Macks Expense Tracker v9.3.0</title>
+<title>Macks Expense Tracker v9.3.2</title>
 <style>
 :root{
   --bg:#0f172a; --panel:#111827; --panel2:#1f2937; --text:#e5e7eb; --muted:#94a3b8; --accent:#38bdf8; --green:#22c55e; --red:#ef4444; --yellow:#f59e0b; --border:#334155;
@@ -161,9 +161,10 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
       <div><label>Payment method / source</label><select id="paymentMethod"></select></div>
     </div>
     <div class="grid2">
-      <div><label id="fromAccountLabel">From / primary account</label><select id="fromAccount"></select></div>
-      <div id="toAccountWrap" class="hidden"><label>To account</label><select id="toAccount"></select></div>
+      <div><label id="fromAccountLabel">Paid from account</label><select id="fromAccount"></select></div>
+      <div id="toAccountWrap"><label id="toAccountLabel">Optional to account</label><select id="toAccount"></select></div>
     </div>
+    <div class="small" id="accountLinkHint" style="margin-top:6px">For moves between your own accounts like Simplii → TFSA or checking → credit card, fill both accounts. The app will treat it as Savings / transfer and recurring rules will carry both accounts too.</div>
     <div><label>Notes</label><textarea id="notes" placeholder="Optional notes"></textarea></div>
 
     <div class="card" style="margin:12px 0 0;padding:10px">
@@ -302,6 +303,13 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
   </div>
   <div class="card">
     <div class="row between">
+      <h3>Recent transfers</h3>
+      <div class="small">Moves between your accounts</div>
+    </div>
+    <div id="recentTransfersList"></div>
+  </div>
+  <div class="card">
+    <div class="row between">
       <h3>Account list</h3>
       <button id="clearAccountFilterBtn" type="button" class="hidden">Show all transactions</button>
     </div>
@@ -397,7 +405,7 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
 
 <script>
 (() => {
-const VERSION = 'v9.3.0';
+const VERSION = 'v9.3.2';
 const STORAGE_KEY = 'macks-expense-tracker-v9_2';
 const AUTO_KEY = 'macks-expense-tracker-v9_2-autobackups';
 const CAD_RATES = { CAD:1, USD:1.36, EUR:1.48, GBP:1.73, JPY:0.0092, MXN:0.080 };
@@ -706,8 +714,20 @@ function syncCategoryForType(){
 }
 function syncTypeUi(){
   const type = $('type').value;
-  $('toAccountWrap').classList.toggle('hidden', type!=='transfer');
-  $('fromAccountLabel').textContent = type==='income' ? 'Deposit / primary account' : 'From / primary account';
+  $('toAccountWrap').classList.remove('hidden');
+  if(type==='income'){
+    $('fromAccountLabel').textContent = 'Deposit to account';
+    $('toAccountLabel').textContent = 'Optional second account';
+    $('accountLinkHint').textContent = 'Use one account for normal income deposits. If you fill both accounts, the app will treat it as a transfer between your own accounts instead.';
+  } else if(type==='transfer'){
+    $('fromAccountLabel').textContent = 'From account';
+    $('toAccountLabel').textContent = 'To account';
+    $('accountLinkHint').textContent = 'Great for things like Simplii → TFSA, checking → savings, or paying off a credit card. Recurring transfers keep both accounts linked too.';
+  } else {
+    $('fromAccountLabel').textContent = 'Paid from account';
+    $('toAccountLabel').textContent = 'Optional to account';
+    $('accountLinkHint').textContent = 'Usually you only need the paid-from account. If you fill both accounts, the app will treat it as a transfer between your own accounts.';
+  }
   syncCategoryForType();
 }
 
@@ -881,6 +901,7 @@ function institutionGroupHtml(group, opts={}){
             <div>${fmt(a.balance)}</div>
             <div class="row" style="justify-content:flex-end;margin-top:6px">
               <button type="button" onclick="openAccountTransactions('${a.id}')">Transactions</button>
+                <button type="button" onclick="openAccountTransfers('${a.id}')">Transfers</button>
             </div>
           </div>
         </div>
@@ -1287,12 +1308,14 @@ function renderTransactions(){
   const typ = $('filterType').value;
   const acc = $('filterAccount').value;
   const activeAccount = acc ? getAccountById(acc) : null;
-  $('txFilterBanner').classList.toggle('hidden', !activeAccount);
-  $('txFilterBanner').innerHTML = activeAccount ? `<div class="row wrap between"><div class="small"><span class="badge">Filtering</span> Viewing account: <strong>${esc(activeAccount.name)}</strong></div><button type="button" onclick="clearAccountTransactionFilter()">Show all transactions</button></div>` : '';
-  $('clearAccountFilterBtn').classList.toggle('hidden', !activeAccount);
+  const transferOnly = !!ui.accountTransfersOnly;
+  $('txFilterBanner').classList.toggle('hidden', !activeAccount && !transferOnly);
+  $('txFilterBanner').innerHTML = (activeAccount || transferOnly) ? `<div class="row wrap between"><div class="small"><span class="badge">Filtering</span> ${activeAccount ? `Viewing account: <strong>${esc(activeAccount.name)}</strong>` : 'Viewing filtered transactions'}${transferOnly ? ' • transfers only' : ''}</div><button type="button" onclick="clearAccountTransactionFilter()">Show all transactions</button></div>` : '';
+  $('clearAccountFilterBtn').classList.toggle('hidden', !activeAccount && !transferOnly);
   const items = state.entries
     .filter(inSelectedPeriod)
     .filter(e => !cat || e.category===cat)
+    .filter(e => !(ui.accountTransfersOnly) || e.type==='transfer')
     .filter(e => !typ || e.type===typ)
     .filter(e => !acc || e.fromAccountId===acc || e.toAccountId===acc)
     .filter(e => {
@@ -1464,6 +1487,14 @@ function saveEntry(){
   const paymentMethod = $('paymentMethod').value;
   const fromAccountId = $('fromAccount').value;
   const toAccountId = $('toAccount').value;
+  let effectiveType = type;
+  if(fromAccountId && toAccountId && fromAccountId === toAccountId){
+    alert('From and To account cannot be the same.');
+    return;
+  }
+  if(fromAccountId && toAccountId && type !== 'transfer'){
+    effectiveType = 'transfer';
+  }
   const notes = $('notes').value.trim();
   let splits = [];
   let splitMode = ui.splitMode;
@@ -1507,10 +1538,10 @@ function saveEntry(){
 
   const entry = {
     id: ui.editingId || uid(),
-    type, date, title, originalAmount, currency, fxRate, amountCad, category, paymentMethod, fromAccountId, toAccountId: type==='transfer' ? toAccountId : '', notes,
+    type: effectiveType, date, title, originalAmount, currency, fxRate, amountCad, category, paymentMethod, fromAccountId, toAccountId: effectiveType==='transfer' ? toAccountId : '', notes,
     splits, splitMode, evenPeopleCount, includeSelf
   };
-  if(type==='transfer' && !entry.fromAccountId && !entry.toAccountId){ alert('Choose at least one account for this transfer.'); return; }
+  if(effectiveType==='transfer' && !entry.fromAccountId && !entry.toAccountId){ alert('Choose at least one account for this transfer.'); return; }
 
   if(ui.editingId){
     const idx = state.entries.findIndex(e=>e.id===ui.editingId);
@@ -1534,13 +1565,13 @@ function saveEntry(){
   if($('recurringEnabled').checked){
     const rule = {
       id: ui.editingRecurringId || uid(),
-      title, type, category, paymentMethod, notes,
+      title, type: effectiveType, category, paymentMethod, notes,
       amountCad,
       originalAmount,
       currency,
       fxRate,
       fromAccountId,
-      toAccountId: type==='transfer' ? toAccountId : '',
+      toAccountId: effectiveType==='transfer' ? toAccountId : '',
       ruleType: $('recurringType').value,
       interval: $('recurringInterval').value,
       customWeeks: Math.max(1, Number($('customWeeksValue').value || 1)),
@@ -2615,9 +2646,36 @@ window.deleteAccount = (id) => {
 };
 window.openAccountTransactions = (id) => { $('filterAccount').value=id; switchTab('transactions'); renderTransactions(); };
 window.clearAccountTransactionFilter = () => { $('filterAccount').value=''; switchTab('transactions'); renderTransactions(); };
+function renderRecentTransfers(){
+  const items = state.entries
+    .filter(e => e.type==='transfer' && (e.fromAccountId || e.toAccountId))
+    .sort((a,b)=> a.date===b.date ? (a.id>b.id?-1:1) : (a.date<b.date?1:-1))
+    .slice(0,10);
+  if(!$('recentTransfersList')) return;
+  if(!items.length){ $('recentTransfersList').innerHTML = '<div class="small">No transfers yet.</div>'; return; }
+  $('recentTransfersList').innerHTML = items.map(e => `
+    <div class="item">
+      <div class="row between">
+        <div>
+          <div><strong>${esc(e.title || 'Transfer')}</strong></div>
+          <div class="small">${esc(e.date)} • ${e.fromAccountId ? 'From: ' + esc(accountName(e.fromAccountId)) : 'From account not set'}${e.toAccountId ? ' • To: ' + esc(accountName(e.toAccountId)) : ''}</div>
+          ${e.notes ? `<div class="small">${esc(e.notes)}</div>` : ''}
+        </div>
+        <div style="text-align:right">
+          <div>${fmt(e.amountCad)}</div>
+          <div class="row" style="justify-content:flex-end;margin-top:8px">
+            ${e.fromAccountId ? `<button type="button" onclick="openAccountTransfers('${e.fromAccountId}')">View from account</button>` : ''}
+            ${e.toAccountId ? `<button type="button" onclick="openAccountTransfers('${e.toAccountId}')">View to account</button>` : ''}
+          </div>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
 function renderAccounts(){
   const totals = computeAccountTotals();
   const groups = groupAccountsByInstitution();
+  renderRecentTransfers();
   $('accountsTotals').innerHTML = [
     ['Liquid cash', totals.liquid, ''],
     ['Total savings', totals.savings, ''],
@@ -2656,6 +2714,7 @@ function renderAccounts(){
               ${available!==null ? `<div class="small">Available ${fmt(available)} • ${Math.max(0, util).toFixed(1)}% util.</div>` : ''}
               <div class="row" style="justify-content:flex-end;margin-top:8px">
                 <button type="button" onclick="openAccountTransactions('${a.id}')">Transactions</button>
+                <button type="button" onclick="openAccountTransfers('${a.id}')">Transfers</button>
                 <button type="button" onclick="editAccount('${a.id}')">Edit</button>
                 <button type="button" class="danger" onclick="deleteAccount('${a.id}')">Delete</button>
               </div>
@@ -2794,8 +2853,8 @@ function bind(){
   $('evenGenerateBtn').addEventListener('click', fillEvenGeneratedRows);
   $('searchTx').addEventListener('input', renderTransactions);
   $('filterCategory').addEventListener('change', renderTransactions);
-  $('filterType').addEventListener('change', renderTransactions);
-  $('filterAccount').addEventListener('change', renderTransactions);
+  $('filterType').addEventListener('change', ()=>{ if($('filterType').value!=='transfer') ui.accountTransfersOnly = false; renderTransactions(); });
+  $('filterAccount').addEventListener('change', ()=>{ if(!$('filterAccount').value) ui.accountTransfersOnly = false; renderTransactions(); });
   $('txPrevBtn').addEventListener('click', ()=>changePeriod(-1));
   $('txNextBtn').addEventListener('click', ()=>changePeriod(1));
   $('txMonthBtn').addEventListener('click', ()=>{ ui.mode='month'; renderAll(); });
