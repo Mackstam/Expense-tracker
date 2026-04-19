@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Macks Expense Tracker v9.3.4</title>
+<title>Macks Expense Tracker v9.3.5</title>
 <style>
 :root{
   --bg:#0f172a; --panel:#111827; --panel2:#1f2937; --text:#e5e7eb; --muted:#94a3b8; --accent:#38bdf8; --green:#22c55e; --red:#ef4444; --yellow:#f59e0b; --border:#334155;
@@ -65,6 +65,9 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
 @media(max-width:420px){
   .account-actions{grid-template-columns:1fr}
 }
+
+.recurring-scope{margin-top:8px;padding:10px;border:1px dashed var(--border);border-radius:12px;background:#0b1220}
+
 @media(min-width:700px){
   .summaryGrid{grid-template-columns:repeat(4,1fr)}
 }
@@ -210,6 +213,15 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
           <div><label>Interval</label><select id="recurringInterval"><option value="weekly">Weekly</option><option value="biweekly">Bi-weekly</option><option value="customWeeks">Every N weeks</option><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select></div>
         </div>
         <div id="customWeeksWrap" class="hidden" style="margin-top:8px"><label>Repeat every N weeks</label><input id="customWeeksValue" type="number" min="1" step="1" value="5" /></div>
+        <div id="recurringScopeWrap" class="recurring-scope hidden">
+          <label>How should recurring edits apply?</label>
+          <select id="recurringEditScope">
+            <option value="occurrence">This occurrence only</option>
+            <option value="future">This and future occurrences</option>
+            <option value="all">All linked occurrences</option>
+          </select>
+          <div class="small" id="recurringScopeHint" style="margin-top:6px">Safer default: only change this occurrence. Use future/all only when you want the recurring rule updated too.</div>
+        </div>
         <div class="grid2">
           <div><label>Start date</label><input id="recurringStart" type="date" /></div>
           <div><label>End date (optional)</label><input id="recurringEnd" type="date" /></div>
@@ -400,7 +412,7 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
 
 <script>
 (() => {
-const VERSION = 'v9.3.4';
+const VERSION = 'v9.3.6';
 const STORAGE_KEY = 'macks-expense-tracker-v9_2';
 const AUTO_KEY = 'macks-expense-tracker-v9_2-autobackups';
 const CAD_RATES = { CAD:1, USD:1.36, EUR:1.48, GBP:1.73, JPY:0.0092, MXN:0.080 };
@@ -713,6 +725,58 @@ function syncTypeUi(){
   syncCategoryForType();
 }
 
+function getRecurringEditScope(){
+  return $('recurringEditScope') ? ($('recurringEditScope').value || 'occurrence') : 'occurrence';
+}
+function updateRecurringScopeUi(){
+  const wrap = $('recurringScopeWrap');
+  if(!wrap) return;
+  const show = !!ui.recurringContext;
+  wrap.classList.toggle('hidden', !show);
+  if(!show) return;
+  const hint = $('recurringScopeHint');
+  if(ui.recurringContext.kind==='entry') {
+    hint.textContent = 'This occurrence only changes the selected transaction. This and future updates the recurring rule without rewriting older posted items.';
+  } else {
+    hint.textContent = 'Future only updates upcoming recurring items. All linked occurrences rewrites every non-detached generated item tied to this recurring rule.';
+  }
+}
+function resetRecurringContext(){
+  ui.recurringContext = null;
+  if($('recurringEditScope')) $('recurringEditScope').value = 'occurrence';
+  updateRecurringScopeUi();
+}
+function applyRuleToEntry(rule, existing){
+  existing.title = rule.title || existing.title;
+  existing.category = rule.category || existing.category;
+  existing.paymentMethod = rule.paymentMethod || existing.paymentMethod;
+  existing.notes = rule.notes ?? existing.notes;
+  existing.amountCad = Number(rule.amountCad || existing.amountCad || 0);
+  existing.originalAmount = Number(rule.originalAmount ?? existing.originalAmount ?? existing.amountCad ?? 0);
+  existing.currency = rule.currency || existing.currency || 'CAD';
+  existing.fxRate = Number(rule.fxRate || existing.fxRate || 1);
+  existing.fromAccountId = rule.fromAccountId ?? existing.fromAccountId ?? '';
+  existing.toAccountId = rule.toAccountId ?? existing.toAccountId ?? '';
+  existing.splitMode = rule.splitMode || existing.splitMode || 'custom';
+  existing.evenPeopleCount = rule.evenPeopleCount || existing.evenPeopleCount || null;
+  existing.includeSelf = !!(rule.includeSelf ?? existing.includeSelf);
+  syncRuleSplitToEntry(rule, existing);
+}
+function detachRecurringEntriesBefore(ruleId, cutoffDate){
+  state.entries.forEach(e => {
+    if(e.recurringRuleId===ruleId && compareDate(e.date, cutoffDate) < 0){
+      e.recurringDetached = true;
+    }
+  });
+}
+function applyRuleToExistingEntries(rule, scope='all', cutoffDate=''){
+  state.entries.forEach(e => {
+    if(e.recurringRuleId!==rule.id || e.recurringDetached) return;
+    if(scope==='future' && cutoffDate && compareDate(e.date, cutoffDate) < 0) return;
+    applyRuleToEntry(rule, e);
+  });
+}
+
 function populateStaticOptions(){
   const currency = $('currency');
   currency.innerHTML = Object.keys(CAD_RATES).map(c => `<option value="${c}">${c}</option>`).join('');
@@ -981,21 +1045,8 @@ function ensureRecurringEntriesToToday(){
         };
         state.entries.push(existing);
         changed = true;
-      } else {
-        existing.title = rule.title || existing.title;
-        existing.category = rule.category || existing.category;
-        existing.paymentMethod = rule.paymentMethod || existing.paymentMethod;
-        existing.notes = rule.notes ?? existing.notes;
-        existing.amountCad = Number(rule.amountCad || existing.amountCad || 0);
-        existing.originalAmount = Number(rule.originalAmount ?? existing.originalAmount ?? existing.amountCad ?? 0);
-        existing.currency = rule.currency || existing.currency || 'CAD';
-        existing.fxRate = Number(rule.fxRate || existing.fxRate || 1);
-        existing.fromAccountId = rule.fromAccountId || existing.fromAccountId || '';
-        existing.toAccountId = rule.toAccountId || existing.toAccountId || '';
-        existing.splitMode = rule.splitMode || existing.splitMode || 'custom';
-        existing.evenPeopleCount = rule.evenPeopleCount || existing.evenPeopleCount || null;
-        existing.includeSelf = !!(rule.includeSelf ?? existing.includeSelf);
-        syncRuleSplitToEntry(rule, existing);
+      } else if(!existing.recurringDetached) {
+        applyRuleToEntry(rule, existing);
       }
     }
   }
@@ -1026,7 +1077,7 @@ function occurrencesInRange(rule, startDate, endDate){
     if(compareDate(cur, startDate) >= 0 && compareDate(cur, endDate) <= 0 && compareDate(cur, rule.endDate || '9999-12-31') <= 0){
       out.push(cur);
     }
-    cur = nextOccurrence(cur, rule.interval);
+    cur = nextOccurrence(cur, rule.interval, rule);
     guard++;
   }
   return out;
@@ -1335,7 +1386,9 @@ window.editEntry = (id) => {
   renderSplitRows(e.splits||[]);
   const linkedRule = e.recurringRuleId ? state.recurringRules.find(r=>r.id===e.recurringRuleId) : null;
   $('recurringEnabled').checked = !!linkedRule;
+  ui.recurringContext = linkedRule ? {kind:'entry', ruleId: linkedRule.id, entryDate: e.date} : null;
   toggleRecurring();
+  updateRecurringScopeUi();
   if(linkedRule){
     $('recurringType').value = linkedRule.ruleType || 'fixed';
     $('recurringInterval').value = linkedRule.interval || 'monthly';
@@ -1432,6 +1485,8 @@ function saveEntry(){
   const paymentMethod = $('paymentMethod').value;
   const fromAccountId = $('fromAccount').value;
   const toAccountId = $('toAccount').value;
+  if(fromAccountId && toAccountId && fromAccountId===toAccountId){ alert('From and To account cannot be the same.'); return; }
+  const effectiveType = (fromAccountId && toAccountId) ? 'transfer' : type;
   const notes = $('notes').value.trim();
   let splits = [];
   let splitMode = ui.splitMode;
@@ -1475,10 +1530,10 @@ function saveEntry(){
 
   const entry = {
     id: ui.editingId || uid(),
-    type, date, title, originalAmount, currency, fxRate, amountCad, category, paymentMethod, fromAccountId, toAccountId: type==='transfer' ? toAccountId : '', notes,
+    type: effectiveType, date, title, originalAmount, currency, fxRate, amountCad, category, paymentMethod, fromAccountId, toAccountId: effectiveType==='transfer' ? toAccountId : '', notes,
     splits, splitMode, evenPeopleCount, includeSelf
   };
-  if(type==='transfer' && !entry.fromAccountId && !entry.toAccountId){ alert('Choose at least one account for this transfer.'); return; }
+  if(effectiveType==='transfer' && !entry.fromAccountId && !entry.toAccountId){ alert('Choose at least one account for this transfer.'); return; }
 
   if(ui.editingId){
     const idx = state.entries.findIndex(e=>e.id===ui.editingId);
@@ -1500,15 +1555,16 @@ function saveEntry(){
 
   // Recurring create/update
   if($('recurringEnabled').checked){
+    const scope = getRecurringEditScope();
     const rule = {
       id: ui.editingRecurringId || uid(),
-      title, type, category, paymentMethod, notes,
+      title, type: effectiveType, category, paymentMethod, notes,
       amountCad,
       originalAmount,
       currency,
       fxRate,
       fromAccountId,
-      toAccountId: type==='transfer' ? toAccountId : '',
+      toAccountId: effectiveType==='transfer' ? toAccountId : '',
       ruleType: $('recurringType').value,
       interval: $('recurringInterval').value,
       customWeeks: Math.max(1, Number($('customWeeksValue').value || 1)),
@@ -1520,17 +1576,32 @@ function saveEntry(){
       includeSelf: entry.includeSelf,
       lastAmountCad: amountCad
     };
-    const ri = state.recurringRules.findIndex(r=>r.id===rule.id);
-    if(ri>=0) state.recurringRules[ri] = rule;
-    else state.recurringRules.push(rule);
-    syncRecurringRuleSplits(rule.id);
-    // attach entry to rule if same date and title
-    entry.recurringRuleId = rule.id;
-    if(ui.editingId){
-      const idx = state.entries.findIndex(e=>e.id===ui.editingId);
-      state.entries[idx].recurringRuleId = rule.id;
+    if(scope==='occurrence' && ui.editingRecurringId){
+      entry.recurringRuleId = ui.editingRecurringId;
+      entry.recurringDetached = true;
+      if(ui.editingId){
+        const idx = state.entries.findIndex(e=>e.id===ui.editingId);
+        state.entries[idx] = {...state.entries[idx], ...entry};
+      }
     } else {
-      state.entries[state.entries.length-1].recurringRuleId = rule.id;
+      const ri = state.recurringRules.findIndex(r=>r.id===rule.id);
+      if(ri>=0) state.recurringRules[ri] = {...state.recurringRules[ri], ...rule};
+      else state.recurringRules.push(rule);
+      if(scope==='future' && ui.editingRecurringId){
+        detachRecurringEntriesBefore(rule.id, date);
+        applyRuleToExistingEntries(rule, 'future', date);
+      } else {
+        applyRuleToExistingEntries(rule, 'all', date);
+      }
+      syncRecurringRuleSplits(rule.id);
+      entry.recurringRuleId = rule.id;
+      entry.recurringDetached = false;
+      if(ui.editingId){
+        const idx = state.entries.findIndex(e=>e.id===ui.editingId);
+        state.entries[idx] = {...state.entries[idx], ...entry};
+      } else {
+        state.entries[state.entries.length-1].recurringRuleId = rule.id;
+      }
     }
   } else if(ui.editingRecurringId){
     // if editing and recurring turned off, keep historical entries but remove rule
@@ -1570,6 +1641,7 @@ function resetForm(){
   $('splitEnabled').checked = false;
   $('recurringEnabled').checked = false;
   $('customWeeksValue').value = 5;
+  resetRecurringContext();
   ui.splitMode = 'custom';
   updateSplitModeBtns();
   renderSplitRows([]);
@@ -2180,6 +2252,9 @@ window.editRule = (ruleId) => {
   $('includeSelf').value = r.includeSelf ? 'yes':'no';
   toggleSplit();
   $('recurringEnabled').checked = true;
+  ui.recurringContext = {kind:'rule', ruleId: r.id, entryDate: todayStr()};
+  updateRecurringScopeUi();
+  $('recurringEditScope').value = 'future';
   $('recurringType').value = r.ruleType || 'fixed';
   $('recurringInterval').value = r.interval || 'monthly';
   $('customWeeksValue').value = Math.max(1, Number(r.customWeeks || 1));
