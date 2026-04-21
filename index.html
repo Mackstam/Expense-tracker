@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Macks Expense Tracker v9.3.8</title>
+<title>Macks Expense Tracker v9.3.7</title>
 <style>
 :root{
   --bg:#0f172a; --panel:#111827; --panel2:#1f2937; --text:#e5e7eb; --muted:#94a3b8; --accent:#38bdf8; --green:#22c55e; --red:#ef4444; --yellow:#f59e0b; --border:#334155;
@@ -412,7 +412,7 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
 
 <script>
 (() => {
-const VERSION = 'v9.3.8';
+const VERSION = 'v9.3.7';
 const STORAGE_KEY = 'macks-expense-tracker-v9_2';
 const AUTO_KEY = 'macks-expense-tracker-v9_2-autobackups';
 const CAD_RATES = { CAD:1, USD:1.36, EUR:1.48, GBP:1.73, JPY:0.0092, MXN:0.080 };
@@ -539,8 +539,6 @@ function migrateIfNeeded(data){
     institution: a.institution || '',
     type: a.type || 'checking',
     openingBalance: Number(a.openingBalance ?? a.balance ?? 0),
-    balanceAnchorCad: a.balanceAnchorCad !== undefined && a.balanceAnchorCad !== null && a.balanceAnchorCad !== '' ? Number(a.balanceAnchorCad) : null,
-    balanceAnchorDate: a.balanceAnchorDate || '',
     creditLimit: Number(a.creditLimit || 0),
     notes: a.notes || '',
     includeInLiquidCash: a.includeInLiquidCash !== undefined ? !!a.includeInLiquidCash : ['checking','savings','cash'].includes(a.type || 'checking'),
@@ -635,7 +633,6 @@ function migrateIfNeeded(data){
     out.customWeeks = Math.max(1, Number(out.customWeeks || out.intervalWeeks || out.everyNWeeks || 1));
     out.startDate = out.startDate || todayStr();
     out.endDate = out.endDate || '';
-    out.generateFromDate = out.generateFromDate || out.startDate || todayStr();
     if(Array.isArray(out.splitsTemplate)) {
       out.splitsTemplate = out.splitsTemplate;
     } else if(out.split && Array.isArray(out.split.people)){
@@ -822,39 +819,28 @@ function inferAccountDefaults(type){
 }
 function computeAccountBalances(){
   const map = {};
-  const anchorDates = {};
-  state.accounts.forEach(a => {
-    const hasAnchor = a.balanceAnchorDate && a.balanceAnchorCad !== null && a.balanceAnchorCad !== undefined && a.balanceAnchorCad !== '';
-    map[a.id] = hasAnchor ? Number(a.balanceAnchorCad || 0) : Number(a.openingBalance || 0);
-    anchorDates[a.id] = hasAnchor ? a.balanceAnchorDate : '';
-  });
+  state.accounts.forEach(a => map[a.id] = Number(a.openingBalance || 0));
   const sorted = [...state.entries].sort((a,b)=>a.date===b.date ? (a.id>b.id?1:-1) : (a.date>b.date?1:-1));
   for(const e of sorted){
     const amt = Number(e.amountCad || 0);
     if(e.type==='expense'){
       if(e.fromAccountId && map[e.fromAccountId] != null){
-        if(anchorDates[e.fromAccountId] && compareDate(e.date, anchorDates[e.fromAccountId]) < 0) continue;
         const acc = getAccountById(e.fromAccountId);
         map[e.fromAccountId] += acc?.type==='credit' ? amt : -amt;
       }
     } else if(e.type==='income'){
       if(e.fromAccountId && map[e.fromAccountId] != null){
-        if(anchorDates[e.fromAccountId] && compareDate(e.date, anchorDates[e.fromAccountId]) < 0) continue;
         const acc = getAccountById(e.fromAccountId);
         map[e.fromAccountId] += acc?.type==='credit' ? -amt : amt;
       }
     } else if(e.type==='transfer'){
       if(e.fromAccountId && map[e.fromAccountId] != null){
-        if(!(anchorDates[e.fromAccountId] && compareDate(e.date, anchorDates[e.fromAccountId]) < 0)){
-          const fromAcc = getAccountById(e.fromAccountId);
-          map[e.fromAccountId] += fromAcc?.type==='credit' ? -amt : -amt;
-        }
+        const fromAcc = getAccountById(e.fromAccountId);
+        map[e.fromAccountId] += fromAcc?.type==='credit' ? -amt : -amt;
       }
       if(e.toAccountId && map[e.toAccountId] != null){
-        if(!(anchorDates[e.toAccountId] && compareDate(e.date, anchorDates[e.toAccountId]) < 0)){
-          const toAcc = getAccountById(e.toAccountId);
-          map[e.toAccountId] += toAcc?.type==='credit' ? -amt : amt;
-        }
+        const toAcc = getAccountById(e.toAccountId);
+        map[e.toAccountId] += toAcc?.type==='credit' ? -amt : amt;
       }
     }
   }
@@ -923,7 +909,6 @@ function institutionGroupHtml(group, opts={}){
           <div>
             <div>${esc(a.name)} <span class="badge">${esc(a.type)}</span> ${a.locked?'<span class="badge">locked</span>':''}</div>
             <div class="small">${txCount} linked transaction${txCount===1?'':'s'}</div>
-              ${a.balanceAnchorDate ? `<div class="small">Balance reset ${fmt(a.balanceAnchorCad||0)} as of ${esc(a.balanceAnchorDate)}</div>` : ''}
             ${available!==null ? `<div class="small">Available ${fmt(available)} • ${Math.max(0, util).toFixed(1)}% util.</div>` : ''}
           </div>
           <div style="text-align:right">
@@ -1032,7 +1017,7 @@ function ensureRecurringEntriesToToday(){
   let changed = false;
   for(const rule of state.recurringRules){
     if(rule.ruleType !== 'fixed') continue;
-    const occ = occurrencesInRange(rule, rule.generateFromDate || rule.startDate, today);
+    const occ = occurrencesInRange(rule, rule.startDate, today);
     for(const date of occ){
       if(isOccurrenceDeleted(rule, date)) continue;
       let existing = state.entries.find(e => e.recurringRuleId===rule.id && e.date===date && e.type===rule.type);
@@ -1585,7 +1570,6 @@ function saveEntry(){
       customWeeks: Math.max(1, Number($('customWeeksValue').value || 1)),
       startDate: $('recurringStart').value || date,
       endDate: $('recurringEnd').value || '',
-      generateFromDate: date,
       splitsTemplate: clone(entry.splits||[]),
       splitMode: entry.splitMode,
       evenPeopleCount: entry.evenPeopleCount,
@@ -1605,11 +1589,7 @@ function saveEntry(){
       else state.recurringRules.push(rule);
       if(scope==='future' && ui.editingRecurringId){
         detachRecurringEntriesBefore(rule.id, date);
-        rule.generateFromDate = date;
         applyRuleToExistingEntries(rule, 'future', date);
-      } else if(scope==='all') {
-        rule.generateFromDate = rule.startDate || date;
-        applyRuleToExistingEntries(rule, 'all', date);
       } else {
         applyRuleToExistingEntries(rule, 'all', date);
       }
@@ -2613,8 +2593,6 @@ function resetAccountForm(){
   $('accountType').value='credit';
   $('accountOpeningBalance').value='';
   $('accountCreditLimit').value='';
-  $('accountBalanceAnchorCad').value='';
-  $('accountBalanceAnchorDate').value='';
   $('accountNotes').value='';
   const d = inferAccountDefaults('credit');
   $('accountIncludeLiquid').checked = d.includeInLiquidCash;
@@ -2629,8 +2607,6 @@ function saveAccount(){
     id: ui.accountEditingId || uid(),
     name, institution: $('accountInstitution').value.trim(), type: $('accountType').value,
     openingBalance: Number($('accountOpeningBalance').value || 0),
-    balanceAnchorCad: $('accountBalanceAnchorCad').value.trim()==='' ? null : Number($('accountBalanceAnchorCad').value || 0),
-    balanceAnchorDate: $('accountBalanceAnchorDate').value || '',
     creditLimit: Number($('accountCreditLimit').value || 0),
     notes: $('accountNotes').value.trim(),
     includeInLiquidCash: $('accountIncludeLiquid').checked,
@@ -2656,8 +2632,6 @@ window.editAccount = (id) => {
   $('accountType').value=a.type||'checking';
   $('accountOpeningBalance').value=a.openingBalance||0;
   $('accountCreditLimit').value=a.creditLimit||'';
-  $('accountBalanceAnchorCad').value=a.balanceAnchorCad ?? '';
-  $('accountBalanceAnchorDate').value=a.balanceAnchorDate||'';
   $('accountNotes').value=a.notes||'';
   $('accountIncludeLiquid').checked=!!a.includeInLiquidCash;
   $('accountIncludeSavings').checked=!!a.includeInSavingsTotal;
@@ -2760,7 +2734,6 @@ function renderAccounts(){
               <div><strong>${esc(a.name)}</strong> <span class="badge">${esc(a.type)}</span> ${a.locked?'<span class="badge">locked</span>':''}</div>
               <div class="small">${a.includeInLiquidCash ? 'Liquid cash' : 'Not liquid'} ${a.includeInSavingsTotal ? '• Savings total' : ''} ${a.includeInNetWorth ? '• Net worth' : '• Excluded from net worth'}</div>
               <div class="small">${txCount} linked transaction${txCount===1?'':'s'}</div>
-              ${a.balanceAnchorDate ? `<div class="small">Balance reset ${fmt(a.balanceAnchorCad||0)} as of ${esc(a.balanceAnchorDate)}</div>` : ''}
               ${a.notes ? `<div class="small">${esc(a.notes)}</div>` : ''}
             </div>
             <div style="text-align:right">
@@ -2947,7 +2920,6 @@ function bind(){
   $('cancelAccountEditBtn').addEventListener('click', ()=>{ resetAccountForm(); $('accountFormCard').classList.add('hidden'); });
   $('accountType').addEventListener('change', ()=>{ const d=inferAccountDefaults($('accountType').value); $('accountIncludeLiquid').checked=d.includeInLiquidCash; $('accountIncludeSavings').checked=d.includeInSavingsTotal; $('accountLocked').checked=d.locked; });
   $('saveAccountBtn').addEventListener('click', saveAccount);
-  $('accountZeroTodayBtn').addEventListener('click', ()=>{ $('accountBalanceAnchorCad').value='0'; $('accountBalanceAnchorDate').value=todayStr(); });
   $('clearAccountFilterBtn').addEventListener('click', ()=>{ $('filterAccount').value=''; ui.tab='transactions'; renderTransactions(); switchTab('transactions'); });
   $('yourName').addEventListener('change', ()=>{ state.settings.yourName = $('yourName').value.trim() || 'Macks'; saveState(false); });
   $('backupJsonBtn').addEventListener('click', exportJson);
