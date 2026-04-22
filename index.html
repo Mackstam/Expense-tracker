@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Macks Expense Tracker v9.3.9</title>
+<title>Macks Expense Tracker v9.3.10</title>
 <style>
 :root{
   --bg:#0f172a; --panel:#111827; --panel2:#1f2937; --text:#e5e7eb; --muted:#94a3b8; --accent:#38bdf8; --green:#22c55e; --red:#ef4444; --yellow:#f59e0b; --border:#334155;
@@ -388,7 +388,7 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
 
 <script>
 (() => {
-const VERSION = 'v9.3.9';
+const VERSION = 'v9.3.10';
 const STORAGE_KEY = 'macks-expense-tracker-v9_2';
 const AUTO_KEY = 'macks-expense-tracker-v9_2-autobackups';
 const CAD_RATES = { CAD:1, USD:1.36, EUR:1.48, GBP:1.73, JPY:0.0092, MXN:0.080 };
@@ -2704,12 +2704,12 @@ function renderSettings(){
   if($('versionBadge')) $('versionBadge').textContent = VERSION;
   if($('versionInfo')) $('versionInfo').innerHTML = `Version <strong>${VERSION}</strong> • Build <strong>${String(Date.now())}</strong>`;
   const cfg = state.settings.dashboard || {};
-  $('dashShowSummary').checked = !!cfg.showSummaryCards;
-  $('dashShowGraph').checked = !!cfg.showGraph;
-  $('dashShowNeedsAction').checked = !!cfg.showNeedsAction;
-  $('dashShowPrepaid').checked = !!cfg.showPrepaidSummary;
-  $('dashShowCategory').checked = !!cfg.showCategoryChart;
-  $('dashNeedsActionOnly').checked = !!cfg.needsActionOnly;
+  if($('dashShowSummary')) $('dashShowSummary').checked = !!cfg.showSummaryCards;
+  if($('dashShowGraph')) $('dashShowGraph').checked = !!cfg.showGraph;
+  if($('dashShowNeedsAction')) $('dashShowNeedsAction').checked = !!cfg.showNeedsAction;
+  if($('dashShowPrepaid')) $('dashShowPrepaid').checked = !!cfg.showPrepaidSummary;
+  if($('dashShowCategory')) $('dashShowCategory').checked = !!cfg.showCategoryChart;
+  if($('dashNeedsActionOnly')) $('dashNeedsActionOnly').checked = !!cfg.needsActionOnly;
 }
 
 function exportJson(){
@@ -2825,9 +2825,11 @@ function bind(){
   $('txYearBtn').addEventListener('click', ()=>{ ui.mode='year'; renderAll(); });
   $('txUseDashboardBtn').addEventListener('click', ()=>{ switchTab('dashboard'); });
   const bindDashSetting = (id, key) => {
-    $(id).addEventListener('change', ()=>{
+    const el = $(id);
+    if(!el) return;
+    el.addEventListener('change', ()=>{
       state.settings.dashboard = state.settings.dashboard || {};
-      state.settings.dashboard[key] = $(id).checked;
+      state.settings.dashboard[key] = el.checked;
       saveState(false);
       renderAll();
     });
