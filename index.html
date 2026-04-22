@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Macks Expense Tracker v9.3.10</title>
+<title>Macks Expense Tracker v9.3.12</title>
 <style>
 :root{
   --bg:#0f172a; --panel:#111827; --panel2:#1f2937; --text:#e5e7eb; --muted:#94a3b8; --accent:#38bdf8; --green:#22c55e; --red:#ef4444; --yellow:#f59e0b; --border:#334155;
@@ -99,7 +99,7 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
         <div class="small">Grouped balances across cards, banking, savings, investments, and GICs.</div>
       </div>
       <div class="dashboard-actions">
-        <button type="button" id="toggleDashboardInstitutionsBtn">Expand</button>
+        <button type="button" id="toggleDashboardInstitutionsBtn" onclick="toggleDashboardInstitutions()">Expand</button>
         <button type="button" onclick="switchTab('accounts')">Open Accounts</button>
       </div>
     </div>
@@ -108,16 +108,22 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
 
   <div class="card" id="dashboardNeedsActionCard">
     <div class="row between">
-      <h3>Needs action</h3>
-      <div class="small">Only unpaid past/current items</div>
+      <div>
+        <h3>Needs action</h3>
+        <div class="small">Only unpaid past/current items</div>
+      </div>
+      <button type="button" id="toggleDashboardNeedsActionBtn" onclick="toggleDashboardNeedsAction()">Expand</button>
     </div>
     <div id="dashboardNeedsAction"></div>
   </div>
 
   <div class="card" id="dashboardPrepaidCard">
     <div class="row between">
-      <h3>Prepaid summary</h3>
-      <div class="small">People currently covered by prepaid</div>
+      <div>
+        <h3>Prepaid summary</h3>
+        <div class="small">People currently covered by prepaid</div>
+      </div>
+      <button type="button" id="toggleDashboardPrepaidBtn" onclick="toggleDashboardPrepaid()">Expand</button>
     </div>
     <div id="dashboardPrepaid"></div>
   </div>
@@ -388,7 +394,7 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
 
 <script>
 (() => {
-const VERSION = 'v9.3.10';
+const VERSION = 'v9.3.12';
 const STORAGE_KEY = 'macks-expense-tracker-v9_2';
 const AUTO_KEY = 'macks-expense-tracker-v9_2-autobackups';
 const CAD_RATES = { CAD:1, USD:1.36, EUR:1.48, GBP:1.73, JPY:0.0092, MXN:0.080 };
@@ -441,7 +447,10 @@ let ui = {
   expandedPeople: {},
   expandedSettledPeople: {},
   pieHiddenCategories: {},
-  accountEditingId: null
+  accountEditingId: null,
+  dashboardInstitutionsExpanded: false,
+  dashboardNeedsActionExpanded: false,
+  dashboardPrepaidExpanded: false
 };
 
 function emptyState(){
@@ -911,6 +920,8 @@ window.appDeletePaymentMethod = (c) => {
 };
 window.togglePieCategory = togglePieCategory;
 window.toggleDashboardInstitutions = () => { ui.dashboardInstitutionsExpanded = !ui.dashboardInstitutionsExpanded; renderDashboardWidgets(); };
+window.toggleDashboardNeedsAction = () => { ui.dashboardNeedsActionExpanded = !ui.dashboardNeedsActionExpanded; renderDashboardWidgets(); };
+window.toggleDashboardPrepaid = () => { ui.dashboardPrepaidExpanded = !ui.dashboardPrepaidExpanded; renderDashboardWidgets(); };
 window.moveAccount = (id, direction) => {
   const ordered = [...state.accounts].sort((a,b)=>Number(a.order||0)-Number(b.order||0) || a.name.localeCompare(b.name));
   const idx = ordered.findIndex(a => a.id===id);
@@ -2423,16 +2434,25 @@ function renderDashboardWidgets(){
   $('dashboardCategoryCard').classList.toggle('hidden', !cfg.showCategoryChart);
 
   const groups = groupAccountsByInstitution();
-  const expanded = !!ui.dashboardInstitutionsExpanded;
-  if($('toggleDashboardInstitutionsBtn')) $('toggleDashboardInstitutionsBtn').textContent = expanded ? 'Collapse' : 'Expand';
-  const homeGroups = expanded ? groups : groups.slice(0,3);
-  $('dashboardInstitutions').innerHTML = groups.length ? homeGroups.map(g => institutionGroupHtml(g, {compact:true, showAccounts:expanded})).join('') + (!expanded && groups.length>3 ? `<div class="small" style="margin-top:8px">+${groups.length-3} more institution${groups.length-3===1?'':'s'} hidden. Tap Expand to show them.</div>` : '') : '<div class="small">Add accounts to see grouped institutions here.</div>';
+  const institutionsExpanded = !!ui.dashboardInstitutionsExpanded;
+  if($('toggleDashboardInstitutionsBtn')) {
+    $('toggleDashboardInstitutionsBtn').textContent = institutionsExpanded ? 'Collapse' : 'Expand';
+    $('toggleDashboardInstitutionsBtn').classList.toggle('hidden', groups.length <= 3);
+  }
+  const homeGroups = institutionsExpanded ? groups : groups.slice(0,3);
+  $('dashboardInstitutions').innerHTML = groups.length ? homeGroups.map(g => institutionGroupHtml(g, {compact:true, showAccounts:institutionsExpanded})).join('') + (!institutionsExpanded && groups.length>3 ? `<div class="small" style="margin-top:8px">+${groups.length-3} more institution${groups.length-3===1?'':'s'} hidden. Tap Expand to show them.</div>` : '') : '<div class="small">Add accounts to see grouped institutions here.</div>';
 
   const people = getDashboardPeopleSummary();
   const needs = people.filter(p=>p.outstanding>0);
   const prepaid = people.filter(p=>p.prepaidRemaining>0);
 
-  $('dashboardNeedsAction').innerHTML = needs.length ? needs.slice(0,6).map(p => `
+  const needsExpanded = !!ui.dashboardNeedsActionExpanded;
+  if($('toggleDashboardNeedsActionBtn')) {
+    $('toggleDashboardNeedsActionBtn').textContent = needsExpanded ? 'Collapse' : 'Expand';
+    $('toggleDashboardNeedsActionBtn').classList.toggle('hidden', needs.length <= 3);
+  }
+  const shownNeeds = needsExpanded ? needs : needs.slice(0,3);
+  $('dashboardNeedsAction').innerHTML = needs.length ? shownNeeds.map(p => `
     <div class="card" style="margin:8px 0 0;padding:10px">
       <div class="row between">
         <div>
@@ -2445,9 +2465,15 @@ function renderDashboardWidgets(){
         </div>
       </div>
     </div>
-  `).join('') : `<div class="small">Nothing needs action right now.</div>`;
+  `).join('') + (!needsExpanded && needs.length>3 ? `<div class="small" style="margin-top:8px">+${needs.length-3} more people hidden. Tap Expand to show them.</div>` : '') : `<div class="small">Nothing needs action right now.</div>`;
 
-  $('dashboardPrepaid').innerHTML = prepaid.length ? prepaid.slice(0,6).map(p => `
+  const prepaidExpanded = !!ui.dashboardPrepaidExpanded;
+  if($('toggleDashboardPrepaidBtn')) {
+    $('toggleDashboardPrepaidBtn').textContent = prepaidExpanded ? 'Collapse' : 'Expand';
+    $('toggleDashboardPrepaidBtn').classList.toggle('hidden', prepaid.length <= 3);
+  }
+  const shownPrepaid = prepaidExpanded ? prepaid : prepaid.slice(0,3);
+  $('dashboardPrepaid').innerHTML = prepaid.length ? shownPrepaid.map(p => `
     <div class="card" style="margin:8px 0 0;padding:10px">
       <div class="row between">
         <div>
@@ -2460,7 +2486,7 @@ function renderDashboardWidgets(){
         </div>
       </div>
     </div>
-  `).join('') : `<div class="small">No prepaid balances to show.</div>`;
+  `).join('') + (!prepaidExpanded && prepaid.length>3 ? `<div class="small" style="margin-top:8px">+${prepaid.length-3} more prepaid balances hidden. Tap Expand to show them.</div>` : '') : `<div class="small">No prepaid balances to show.</div>`;
 }
 
 
@@ -2824,6 +2850,9 @@ function bind(){
   $('txMonthBtn').addEventListener('click', ()=>{ ui.mode='month'; renderAll(); });
   $('txYearBtn').addEventListener('click', ()=>{ ui.mode='year'; renderAll(); });
   $('txUseDashboardBtn').addEventListener('click', ()=>{ switchTab('dashboard'); });
+  if($('toggleDashboardInstitutionsBtn')) $('toggleDashboardInstitutionsBtn').addEventListener('click', ()=>{ toggleDashboardInstitutions(); });
+  if($('toggleDashboardNeedsActionBtn')) $('toggleDashboardNeedsActionBtn').addEventListener('click', ()=>{ toggleDashboardNeedsAction(); });
+  if($('toggleDashboardPrepaidBtn')) $('toggleDashboardPrepaidBtn').addEventListener('click', ()=>{ toggleDashboardPrepaid(); });
   const bindDashSetting = (id, key) => {
     const el = $(id);
     if(!el) return;
