@@ -409,7 +409,7 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
 
 <script>
 (() => {
-const VERSION = 'v9.3.4';
+const VERSION = 'v9.3.15';
 const STORAGE_KEY = 'macks-expense-tracker-v9_2';
 const AUTO_KEY = 'macks-expense-tracker-v9_2-autobackups';
 const CAD_RATES = { CAD:1, USD:1.36, EUR:1.48, GBP:1.73, JPY:0.0092, MXN:0.080 };
@@ -2694,6 +2694,7 @@ function accountActivityHtml(account){
 function renderAccounts(){
   const totals = computeAccountTotals();
   const groups = groupAccountsByInstitution();
+  const sortedAccounts = getSortedAccounts();
   $('accountsTotals').innerHTML = [
     ['Liquid cash', totals.liquid, ''],
     ['Total savings', totals.savings, ''],
