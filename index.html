@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Macks Expense Tracker v9.3.4</title>
+<title>Macks Expense Tracker v9.3.16</title>
 <style>
 :root{
   --bg:#0f172a; --panel:#111827; --panel2:#1f2937; --text:#e5e7eb; --muted:#94a3b8; --accent:#38bdf8; --green:#22c55e; --red:#ef4444; --yellow:#f59e0b; --border:#334155;
@@ -223,6 +223,15 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
           <div><label>Start date</label><input id="recurringStart" type="date" /></div>
           <div><label>End date (optional)</label><input id="recurringEnd" type="date" /></div>
         </div>
+        <div id="recurringScopeWrap" style="margin-top:8px">
+          <label>Apply account changes to</label>
+          <select id="recurringAccountScope">
+            <option value="future">This and future occurrences</option>
+            <option value="occurrence">This occurrence only</option>
+            <option value="all">All linked occurrences</option>
+          </select>
+          <div class="small">Use this when linking a recurring paycheque/bill to an account. Future-only prevents old occurrences from being backfilled into that account.</div>
+        </div>
       </div>
     </div>
 
@@ -409,7 +418,7 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
 
 <script>
 (() => {
-const VERSION = 'v9.3.15';
+const VERSION = 'v9.3.16';
 const STORAGE_KEY = 'macks-expense-tracker-v9_2';
 const AUTO_KEY = 'macks-expense-tracker-v9_2-autobackups';
 const CAD_RATES = { CAD:1, USD:1.36, EUR:1.48, GBP:1.73, JPY:0.0092, MXN:0.080 };
@@ -564,6 +573,8 @@ function migrateIfNeeded(data){
     out.paymentMethod = out.paymentMethod || out.source || 'Other';
     out.fromAccountId = out.fromAccountId || out.accountId || '';
     out.toAccountId = out.toAccountId || '';
+    out.accountEffectiveDate = out.accountEffectiveDate || out.accountsEffectiveDate || '';
+    out.accountOverride = !!out.accountOverride;
 
     let splits = [];
     if(Array.isArray(out.splits)){
@@ -949,6 +960,17 @@ function isOccurrenceDeleted(rule, date){
   return Array.isArray(rule?.deletedOccurrences) && rule.deletedOccurrences.includes(date);
 }
 
+function recurringAccountsApplyOn(rule, date){
+  const effective = rule?.accountEffectiveDate || '';
+  return !effective || compareDate(date, effective) >= 0;
+}
+function recurringFromAccountForDate(rule, date){
+  return recurringAccountsApplyOn(rule, date) ? (rule.fromAccountId || '') : '';
+}
+function recurringToAccountForDate(rule, date){
+  return recurringAccountsApplyOn(rule, date) ? (rule.toAccountId || '') : '';
+}
+
 
 function cloneSplitTemplateForEntry(rule){
   return (rule.splitsTemplate||[]).map(s => ({
@@ -1005,8 +1027,9 @@ function ensureRecurringEntriesToToday(){
           category: rule.category || 'Other',
           paymentMethod: rule.paymentMethod || 'Other',
           notes: rule.notes || '',
-          fromAccountId: rule.fromAccountId || '',
-          toAccountId: rule.toAccountId || '',
+          fromAccountId: recurringFromAccountForDate(rule, date),
+          toAccountId: recurringToAccountForDate(rule, date),
+          accountOverride: false,
           recurringRuleId: rule.id,
           recurringGenerated: true,
           splitMode: rule.splitMode || 'custom',
@@ -1025,8 +1048,10 @@ function ensureRecurringEntriesToToday(){
         existing.originalAmount = Number(rule.originalAmount ?? existing.originalAmount ?? existing.amountCad ?? 0);
         existing.currency = rule.currency || existing.currency || 'CAD';
         existing.fxRate = Number(rule.fxRate || existing.fxRate || 1);
-        existing.fromAccountId = rule.fromAccountId || existing.fromAccountId || '';
-        existing.toAccountId = rule.toAccountId || existing.toAccountId || '';
+        if(!existing.accountOverride && recurringAccountsApplyOn(rule, date)){
+          existing.fromAccountId = rule.fromAccountId || '';
+          existing.toAccountId = rule.toAccountId || '';
+        }
         existing.splitMode = rule.splitMode || existing.splitMode || 'custom';
         existing.evenPeopleCount = rule.evenPeopleCount || existing.evenPeopleCount || null;
         existing.includeSelf = !!(rule.includeSelf ?? existing.includeSelf);
@@ -1061,7 +1086,7 @@ function occurrencesInRange(rule, startDate, endDate){
     if(compareDate(cur, startDate) >= 0 && compareDate(cur, endDate) <= 0 && compareDate(cur, rule.endDate || '9999-12-31') <= 0){
       out.push(cur);
     }
-    cur = nextOccurrence(cur, rule.interval);
+    cur = nextOccurrence(cur, rule.interval, rule);
     guard++;
   }
   return out;
@@ -1377,6 +1402,7 @@ window.editEntry = (id) => {
     $('customWeeksValue').value = Math.max(1, Number(linkedRule.customWeeks || 1));
     $('recurringStart').value = linkedRule.startDate || e.date;
     $('recurringEnd').value = linkedRule.endDate || '';
+    if($('recurringAccountScope')) $('recurringAccountScope').value = 'future';
     $('fromAccount').value = e.fromAccountId || linkedRule.fromAccountId || '';
     $('toAccount').value = e.toAccountId || linkedRule.toAccountId || '';
     syncTypeUi();
@@ -1387,6 +1413,7 @@ window.editEntry = (id) => {
     $('customWeeksValue').value = 5;
     $('recurringStart').value = e.date;
     $('recurringEnd').value = '';
+    if($('recurringAccountScope')) $('recurringAccountScope').value = 'future';
   }
   $('cancelEditBtn').classList.remove('hidden');
   switchTab('add');
@@ -1511,6 +1538,7 @@ function saveEntry(){
   const entry = {
     id: ui.editingId || uid(),
     type, date, title, originalAmount, currency, fxRate, amountCad, category, paymentMethod, fromAccountId, toAccountId: type==='transfer' ? toAccountId : '', notes,
+    accountOverride: false,
     splits, splitMode, evenPeopleCount, includeSelf
   };
   if(type==='transfer' && !entry.fromAccountId && !entry.toAccountId){ alert('Choose at least one account for this transfer.'); return; }
@@ -1535,6 +1563,16 @@ function saveEntry(){
 
   // Recurring create/update
   if($('recurringEnabled').checked){
+    const existingRule = ui.editingRecurringId ? state.recurringRules.find(r => r.id===ui.editingRecurringId) : null;
+    const accountScope = $('recurringAccountScope') ? $('recurringAccountScope').value : (ui.editingId ? 'future' : 'all');
+    const ruleFromAccountId = accountScope==='occurrence' && existingRule ? (existingRule.fromAccountId || '') : fromAccountId;
+    const ruleToAccountId = accountScope==='occurrence' && existingRule ? (existingRule.toAccountId || '') : (type==='transfer' ? toAccountId : '');
+    const ruleAccountEffectiveDate = accountScope==='future' ? date : (accountScope==='occurrence' && existingRule ? (existingRule.accountEffectiveDate || '') : '');
+    entry.accountOverride = accountScope==='occurrence';
+    if(ui.editingId){
+      const idx = state.entries.findIndex(e=>e.id===ui.editingId);
+      if(idx>=0) state.entries[idx].accountOverride = entry.accountOverride;
+    }
     const rule = {
       id: ui.editingRecurringId || uid(),
       title, type, category, paymentMethod, notes,
@@ -1542,8 +1580,9 @@ function saveEntry(){
       originalAmount,
       currency,
       fxRate,
-      fromAccountId,
-      toAccountId: type==='transfer' ? toAccountId : '',
+      fromAccountId: ruleFromAccountId,
+      toAccountId: type==='transfer' ? ruleToAccountId : '',
+      accountEffectiveDate: ruleAccountEffectiveDate,
       ruleType: $('recurringType').value,
       interval: $('recurringInterval').value,
       customWeeks: Math.max(1, Number($('customWeeksValue').value || 1)),
@@ -1564,9 +1603,22 @@ function saveEntry(){
     if(ui.editingId){
       const idx = state.entries.findIndex(e=>e.id===ui.editingId);
       state.entries[idx].recurringRuleId = rule.id;
+      state.entries[idx].accountOverride = accountScope==='occurrence';
     } else {
       state.entries[state.entries.length-1].recurringRuleId = rule.id;
+      state.entries[state.entries.length-1].accountOverride = accountScope==='occurrence';
     }
+
+    // Apply account changes only to the requested scope. This prevents old recurring paycheques/bills
+    // from being backfilled into a newly linked account.
+    state.entries.forEach(e => {
+      if(e.recurringRuleId !== rule.id) return;
+      if(accountScope === 'all' || (accountScope === 'future' && compareDate(e.date, date) >= 0)){
+        e.fromAccountId = fromAccountId || '';
+        e.toAccountId = type==='transfer' ? (toAccountId || '') : '';
+        e.accountOverride = false;
+      }
+    });
   } else if(ui.editingRecurringId){
     // if editing and recurring turned off, keep historical entries but remove rule
     state.recurringRules = state.recurringRules.filter(r=>r.id!==ui.editingRecurringId);
@@ -1605,6 +1657,7 @@ function resetForm(){
   $('splitEnabled').checked = false;
   $('recurringEnabled').checked = false;
   $('customWeeksValue').value = 5;
+  if($('recurringAccountScope')) $('recurringAccountScope').value = 'future';
   ui.splitMode = 'custom';
   updateSplitModeBtns();
   renderSplitRows([]);
@@ -2186,6 +2239,7 @@ window.createVariableEntry = (ruleId) => {
   $('customWeeksValue').value = Math.max(1, Number(r.customWeeks || 1));
   $('recurringStart').value = r.startDate || date;
   $('recurringEnd').value = r.endDate || '';
+  if($('recurringAccountScope')) $('recurringAccountScope').value = 'occurrence';
   toggleRecurring();
   switchTab('add');
 };
@@ -2220,6 +2274,7 @@ window.editRule = (ruleId) => {
   $('customWeeksValue').value = Math.max(1, Number(r.customWeeks || 1));
   $('recurringStart').value = r.startDate || todayStr();
   $('recurringEnd').value = r.endDate || '';
+  if($('recurringAccountScope')) $('recurringAccountScope').value = 'all';
   toggleRecurring();
   $('cancelEditBtn').classList.remove('hidden');
   switchTab('add');
