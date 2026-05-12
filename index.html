@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Macks Expense Tracker v9.3.19</title>
+<title>Macks Expense Tracker v9.4.0</title>
 <style>
 :root{
   --bg:#0f172a; --panel:#111827; --panel2:#1f2937; --text:#e5e7eb; --muted:#94a3b8; --accent:#38bdf8; --green:#22c55e; --red:#ef4444; --yellow:#f59e0b; --border:#334155;
@@ -165,7 +165,7 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
       <div class="small" id="editingHint"></div>
     </div>
     <div class="grid2">
-      <div><label>Type</label><select id="type"><option value="expense">Expense</option><option value="income">Income</option><option value="transfer">Savings / transfer</option></select></div>
+      <div><label>Type</label><select id="type"><option value="expense">Expense</option><option value="income">Income</option><option value="transfer">Savings / transfer</option><option value="adjustment">Balance adjustment</option></select></div>
       <div><label>Date</label><input id="date" type="date" /></div>
     </div>
     <div><label>Title</label><input id="title" placeholder="Spotify, Groceries Costco, Paycheque..." /></div>
@@ -177,6 +177,10 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
     <div class="grid2">
       <div><label>Category</label><select id="category"></select></div>
       <div><label>Payment method / source</label><select id="paymentMethod"></select></div>
+    </div>
+    <div class="grid2">
+      <div><label>Status</label><select id="status"><option value="posted">Posted</option><option value="pending">Pending</option><option value="adjusted">Adjusted</option><option value="cancelled">Cancelled</option></select></div>
+      <div class="small" style="align-self:end">Pending/adjusted helps track hotel, gas, and card holds without changing categories.</div>
     </div>
     <div class="grid2">
       <div><label id="fromAccountLabel">From / primary account</label><select id="fromAccount"></select></div>
@@ -253,8 +257,9 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
     <div class="row wrap">
       <div style="flex:1"><label>Search</label><input id="searchTx" placeholder="Search title, notes, person..." /></div>
       <div style="min-width:130px"><label>Category</label><select id="filterCategory"></select></div>
-      <div style="min-width:130px"><label>Type</label><select id="filterType"><option value="">All</option><option value="expense">Expense</option><option value="income">Income</option><option value="transfer">Savings / transfer</option></select></div>
+      <div style="min-width:130px"><label>Type</label><select id="filterType"><option value="">All</option><option value="expense">Expense</option><option value="income">Income</option><option value="transfer">Savings / transfer</option><option value="adjustment">Balance adjustment</option></select></div>
       <div style="min-width:150px"><label>Account</label><select id="filterAccount"></select></div>
+      <div style="min-width:150px"><label>Recurring</label><select id="filterRecurring"><option value="">All</option><option value="recurring">Recurring only</option><option value="nonrecurring">Non-recurring only</option></select></div>
     </div>
   </div>
   <div class="card">
@@ -318,6 +323,28 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
       <button id="clearAccountFilterBtn" type="button">Clear tx filter</button>
     </div>
     <div id="accountsList"></div>
+  </div>
+  <div class="card">
+    <h3>Pay card helper</h3>
+    <div class="small">Creates a transfer from a bank/spend account to a credit card.</div>
+    <div class="grid2" style="margin-top:8px">
+      <div><label>From account</label><select id="payCardFromAccount"></select></div>
+      <div><label>To card</label><select id="payCardToAccount"></select></div>
+      <div><label>Amount</label><input id="payCardAmount" type="number" step="0.01" placeholder="0.00" /></div>
+      <div><label>Date</label><input id="payCardDate" type="date" /></div>
+    </div>
+    <div style="margin-top:8px"><label>Notes</label><input id="payCardNotes" placeholder="Optional" /></div>
+    <div class="row wrap" style="margin-top:10px"><button id="createCardPaymentBtn" type="button" class="primary">Create card payment</button></div>
+  </div>
+  <div class="card">
+    <div class="row between">
+      <div>
+        <h3>Unassigned transactions</h3>
+        <div class="small">Items missing the account/card needed for balance math.</div>
+      </div>
+      <button id="refreshUnassignedBtn" type="button">Refresh</button>
+    </div>
+    <div id="unassignedList"></div>
   </div>
 </section>
 
@@ -413,7 +440,7 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
 
 <script>
 (() => {
-const VERSION = 'v9.3.19';
+const VERSION = 'v9.4.0';
 const STORAGE_KEY = 'macks-expense-tracker-v9_2';
 const AUTO_KEY = 'macks-expense-tracker-v9_2-autobackups';
 const CAD_RATES = { CAD:1, USD:1.36, EUR:1.48, GBP:1.73, JPY:0.0092, MXN:0.080 };
@@ -558,7 +585,7 @@ function migrateIfNeeded(data){
   data.entries = data.entries.map((e) => {
     const out = {...e};
     out.id = out.id || uid();
-    out.type = ['expense','income','transfer'].includes(out.type) ? out.type : 'expense';
+    out.type = ['expense','income','transfer','adjustment'].includes(out.type) ? out.type : 'expense';
     out.date = out.date || todayStr();
     out.title = out.title || out.name || 'Untitled';
     out.notes = out.notes ?? out.note ?? '';
@@ -568,6 +595,7 @@ function migrateIfNeeded(data){
     out.amountCad = Number(out.amountCad ?? out.amount ?? (out.originalAmount * out.fxRate) ?? 0);
     out.category = out.category || 'Other';
     out.paymentMethod = out.paymentMethod || out.source || 'Other';
+    out.status = ['posted','pending','adjusted','cancelled'].includes(out.status) ? out.status : 'posted';
     out.fromAccountId = out.fromAccountId || out.accountId || '';
     out.toAccountId = out.toAccountId || '';
 
@@ -625,9 +653,10 @@ function migrateIfNeeded(data){
     const out = {...r};
     out.id = out.id || uid();
     out.title = out.title || out.name || 'Recurring';
-    out.type = ['expense','income','transfer'].includes(out.type) ? out.type : 'expense';
+    out.type = ['expense','income','transfer','adjustment'].includes(out.type) ? out.type : 'expense';
     out.category = out.category || 'Other';
     out.paymentMethod = out.paymentMethod || out.source || 'Other';
+    out.status = ['posted','pending','adjusted','cancelled'].includes(out.status) ? out.status : 'posted';
     out.fromAccountId = out.fromAccountId || out.accountId || '';
     out.toAccountId = out.toAccountId || '';
     out.notes = out.notes ?? out.note ?? '';
@@ -726,11 +755,14 @@ function syncCategoryForType(){
   const type = $('type').value;
   if(type==='income' && state.settings.categories.includes('Income')) $('category').value = 'Income';
   if(type==='transfer' && state.settings.categories.includes('Savings')) $('category').value = 'Savings';
+  if(type==='adjustment' && state.settings.categories.includes('Other')) $('category').value = 'Other';
 }
 function syncTypeUi(){
   const type = $('type').value;
   $('toAccountWrap').classList.toggle('hidden', type!=='transfer');
-  $('fromAccountLabel').textContent = type==='income' ? 'Deposit / primary account' : 'From / primary account';
+  if(type==='income') $('fromAccountLabel').textContent = 'Deposit / primary account';
+  else if(type==='adjustment') $('fromAccountLabel').textContent = 'Account to adjust';
+  else $('fromAccountLabel').textContent = 'From / primary account';
   syncCategoryForType();
 }
 
@@ -821,30 +853,43 @@ window.moveAccount = (id, direction) => {
   renderAll();
 };
 
+function accountIdForEntry(e){
+  return e.fromAccountId || e.toAccountId || e.accountId || '';
+}
+function isCancelledEntry(e){ return (e.status || 'posted') === 'cancelled'; }
 function computeAccountBalances(){
   const map = {};
   state.accounts.forEach(a => map[a.id] = Number(a.openingBalance || 0));
-  const sorted = [...state.entries].sort((a,b)=>a.date===b.date ? (a.id>b.id?1:-1) : (a.date>b.date?1:-1));
+  const sorted = [...state.entries].filter(e => !isCancelledEntry(e)).sort((a,b)=>a.date===b.date ? (a.id>b.id?1:-1) : (a.date>b.date?1:-1));
   for(const e of sorted){
     const amt = Number(e.amountCad || 0);
     if(e.type==='expense'){
-      if(e.fromAccountId && map[e.fromAccountId] != null){
-        const acc = getAccountById(e.fromAccountId);
-        map[e.fromAccountId] += acc?.type==='credit' ? amt : -amt;
+      const id = e.fromAccountId || e.accountId || '';
+      if(id && map[id] != null){
+        const acc = getAccountById(id);
+        map[id] += acc?.type==='credit' ? amt : -amt;
       }
     } else if(e.type==='income'){
-      if(e.fromAccountId && map[e.fromAccountId] != null){
-        const acc = getAccountById(e.fromAccountId);
-        map[e.fromAccountId] += acc?.type==='credit' ? -amt : amt;
+      const id = accountIdForEntry(e);
+      if(id && map[id] != null){
+        const acc = getAccountById(id);
+        map[id] += acc?.type==='credit' ? -amt : amt;
       }
     } else if(e.type==='transfer'){
       if(e.fromAccountId && map[e.fromAccountId] != null){
-        const fromAcc = getAccountById(e.fromAccountId);
-        map[e.fromAccountId] += fromAcc?.type==='credit' ? -amt : -amt;
+        // Transfer out always reduces the source account. For a credit card source, this is treated as moving a credit/overpayment out.
+        map[e.fromAccountId] -= amt;
       }
       if(e.toAccountId && map[e.toAccountId] != null){
         const toAcc = getAccountById(e.toAccountId);
+        // Transfer into a credit card is a payment and reduces the amount owed.
         map[e.toAccountId] += toAcc?.type==='credit' ? -amt : amt;
+      }
+    } else if(e.type==='adjustment'){
+      const id = accountIdForEntry(e);
+      if(id && map[id] != null){
+        // Adjustment is a signed balance correction only. It does not count as income/expense/savings.
+        map[id] += amt;
       }
     }
   }
@@ -884,6 +929,11 @@ function groupAccountsByInstitution(){
     .map(g => ({...g, sortOrder: Math.min(...g.accounts.map(a => Number(a.order ?? 0))), accounts:g.accounts.sort((a,b)=> Number(a.order ?? 0)-Number(b.order ?? 0) || a.name.localeCompare(b.name))}))
     .sort((a,b) => Number(a.sortOrder ?? 0) - Number(b.sortOrder ?? 0) || a.name.localeCompare(b.name));
 }
+function creditAvailable(a){
+  const limit = Number(a.creditLimit || 0);
+  const bal = Number(a.balance || 0);
+  return bal < 0 ? limit + Math.abs(bal) : Math.max(0, limit - bal);
+}
 function institutionGroupHtml(group, opts={}){
   const compact = !!opts.compact;
   const showAccounts = opts.showAccounts !== false;
@@ -906,7 +956,7 @@ function institutionGroupHtml(group, opts={}){
     </div>
     ${showAccounts ? `<div style="margin-top:8px">${accounts.map(a => {
       const txCount = state.entries.filter(e => e.fromAccountId===a.id || e.toAccountId===a.id).length;
-      const available = a.type==='credit' && Number(a.creditLimit||0)>0 ? Math.max(0, Number(a.creditLimit||0) - a.balance) : null;
+      const available = a.type==='credit' && Number(a.creditLimit||0)>0 ? creditAvailable(a) : null;
       const util = a.type==='credit' && Number(a.creditLimit||0)>0 ? (a.balance / Number(a.creditLimit||1))*100 : null;
       return `<div class="item">
         <div class="row between">
@@ -1037,6 +1087,7 @@ function ensureRecurringEntriesToToday(){
           amountCad: Number(rule.amountCad || 0),
           category: rule.category || 'Other',
           paymentMethod: rule.paymentMethod || 'Other',
+          status: 'posted',
           notes: rule.notes || '',
           fromAccountId: shouldApplyRuleAccounts(rule, date) ? (rule.fromAccountId || '') : '',
           toAccountId: shouldApplyRuleAccounts(rule, date) ? (rule.toAccountId || '') : '',
@@ -1050,22 +1101,27 @@ function ensureRecurringEntriesToToday(){
         state.entries.push(existing);
         changed = true;
       } else {
-        existing.title = rule.title || existing.title;
-        existing.category = rule.category || existing.category;
-        existing.paymentMethod = rule.paymentMethod || existing.paymentMethod;
-        existing.notes = rule.notes ?? existing.notes;
-        existing.amountCad = Number(rule.amountCad || existing.amountCad || 0);
-        existing.originalAmount = Number(rule.originalAmount ?? existing.originalAmount ?? existing.amountCad ?? 0);
-        existing.currency = rule.currency || existing.currency || 'CAD';
-        existing.fxRate = Number(rule.fxRate || existing.fxRate || 1);
-        if(shouldApplyRuleAccounts(rule, existing.date)){
-          existing.fromAccountId = rule.fromAccountId || existing.fromAccountId || '';
-          existing.toAccountId = rule.toAccountId || existing.toAccountId || '';
+        const occurrenceIsFuture = compareDate(existing.date, todayStr()) > 0;
+        // Never rewrite past/current generated transactions from a recurring rule edit.
+        // This preserves real posted amounts like changing paycheques.
+        if(occurrenceIsFuture){
+          existing.title = rule.title || existing.title;
+          existing.category = rule.category || existing.category;
+          existing.paymentMethod = rule.paymentMethod || existing.paymentMethod;
+          existing.notes = rule.notes ?? existing.notes;
+          existing.amountCad = Number(rule.amountCad || existing.amountCad || 0);
+          existing.originalAmount = Number(rule.originalAmount ?? existing.originalAmount ?? existing.amountCad ?? 0);
+          existing.currency = rule.currency || existing.currency || 'CAD';
+          existing.fxRate = Number(rule.fxRate || existing.fxRate || 1);
+          if(shouldApplyRuleAccounts(rule, existing.date)){
+            existing.fromAccountId = rule.fromAccountId || existing.fromAccountId || '';
+            existing.toAccountId = rule.toAccountId || existing.toAccountId || '';
+          }
+          existing.splitMode = rule.splitMode || existing.splitMode || 'custom';
+          existing.evenPeopleCount = rule.evenPeopleCount || existing.evenPeopleCount || null;
+          existing.includeSelf = !!(rule.includeSelf ?? existing.includeSelf);
+          syncRuleSplitToEntry(rule, existing);
         }
-        existing.splitMode = rule.splitMode || existing.splitMode || 'custom';
-        existing.evenPeopleCount = rule.evenPeopleCount || existing.evenPeopleCount || null;
-        existing.includeSelf = !!(rule.includeSelf ?? existing.includeSelf);
-        syncRuleSplitToEntry(rule, existing);
       }
     }
   }
@@ -1245,7 +1301,7 @@ function nextOccurrence(date, interval, rule=null){
 }
 
 function computePeriodSummary(){
-  const actual = state.entries.filter(inSelectedPeriod);
+  const actual = state.entries.filter(inSelectedPeriod).filter(e => !isCancelledEntry(e));
   const income = actual.filter(e=>e.type==='income').reduce((s,e)=>s+Number(e.amountCad||0),0);
   const outflow = actual.filter(e=>e.type==='expense').reduce((s,e)=>s+Number(e.amountCad||0),0);
   const savings = actual.filter(e=>e.type==='transfer').reduce((s,e)=>s+Number(e.amountCad||0),0);
@@ -1289,6 +1345,22 @@ function renderSummaryCards(){
     </div>`).join('');
 }
 
+
+function typeLabel(type){
+  if(type==='transfer') return 'Savings / transfer';
+  if(type==='adjustment') return 'Balance adjustment';
+  return type || 'expense';
+}
+function statusLabel(status){
+  const s = status || 'posted';
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+function accountLine(e){
+  if(e.type==='income') return accountIdForEntry(e) ? 'Deposit to: ' + esc(accountName(accountIdForEntry(e))) : '';
+  if(e.type==='adjustment') return accountIdForEntry(e) ? 'Adjust: ' + esc(accountName(accountIdForEntry(e))) : '';
+  return `${e.fromAccountId ? 'From: ' + esc(accountName(e.fromAccountId)) : ''}${e.toAccountId ? (e.fromAccountId ? ' • ' : '') + 'To: ' + esc(accountName(e.toAccountId)) : ''}`;
+}
+
 function renderTransactions(){
   $('txPeriodLabel').textContent = currentPeriodLabel();
   $('txMonthBtn').classList.toggle('primary', ui.mode==='month');
@@ -1297,11 +1369,13 @@ function renderTransactions(){
   const cat = $('filterCategory').value;
   const typ = $('filterType').value;
   const acc = $('filterAccount').value;
+  const recurringFilter = $('filterRecurring').value;
   const items = state.entries
     .filter(inSelectedPeriod)
     .filter(e => !cat || e.category===cat)
 .filter(e => !typ || e.type===typ)
     .filter(e => !acc || e.fromAccountId===acc || e.toAccountId===acc)
+    .filter(e => recurringFilter==='recurring' ? !!e.recurringRuleId : recurringFilter==='nonrecurring' ? !e.recurringRuleId : true)
     .filter(e => {
       if(!q) return true;
       const blob = [e.title, e.notes, e.category, e.paymentMethod, ...(e.splits||[]).map(s=>s.person)].join(' ').toLowerCase();
@@ -1320,9 +1394,9 @@ function renderTransactions(){
     return `<div class="item">
       <div class="row between">
         <div>
-          <div><strong>${esc(e.title)}</strong> <span class="badge">${esc(e.type==='transfer' ? 'Savings / transfer' : e.type)}</span></div>
+          <div><strong>${esc(e.title)}</strong> <span class="badge">${esc(typeLabel(e.type))}</span> <span class="badge">${esc(statusLabel(e.status))}</span>${e.recurringRuleId ? ' <span class="badge">recurring</span>' : ''}</div>
           <div class="small">${esc(e.date)} • ${compareDate(e.date, todayStr()) > 0 ? 'Upcoming' : 'Occurred'} • ${esc(e.category||'')} • ${esc(e.paymentMethod||'')}</div>
-          <div class="small">${e.fromAccountId ? 'From: ' + esc(accountName(e.fromAccountId)) : ''}${e.toAccountId ? (e.fromAccountId ? ' • ' : '') + 'To: ' + esc(accountName(e.toAccountId)) : ''}</div>
+          <div class="small">${accountLine(e)}</div>
           ${fx}
           ${splitSummary}
           ${e.notes ? `<div class="small">${esc(e.notes)}</div>` : ''}
@@ -1354,6 +1428,7 @@ window.editEntry = (id) => {
   $('fxRate').value = e.fxRate || CAD_RATES[e.currency||'CAD'] || 1;
   $('category').value = e.category || state.settings.categories[0];
   $('paymentMethod').value = e.paymentMethod || state.settings.paymentMethods[0];
+  $('status').value = e.status || 'posted';
   $('fromAccount').value = e.fromAccountId || '';
   $('toAccount').value = e.toAccountId || '';
   $('notes').value = e.notes || '';
@@ -1469,6 +1544,7 @@ function saveEntry(){
   const amountCad = Number((originalAmount * fxRate).toFixed(2));
   const category = $('category').value;
   const paymentMethod = $('paymentMethod').value;
+  const status = $('status').value || 'posted';
   const fromAccountId = $('fromAccount').value;
   const toAccountId = $('toAccount').value;
   const notes = $('notes').value.trim();
@@ -1514,10 +1590,11 @@ function saveEntry(){
 
   const entry = {
     id: ui.editingId || uid(),
-    type, date, title, originalAmount, currency, fxRate, amountCad, category, paymentMethod, fromAccountId, toAccountId: type==='transfer' ? toAccountId : '', notes,
+    type, date, title, originalAmount, currency, fxRate, amountCad, category, paymentMethod, status, fromAccountId, toAccountId: type==='transfer' ? toAccountId : '', notes,
     splits, splitMode, evenPeopleCount, includeSelf
   };
   if(type==='transfer' && !entry.fromAccountId && !entry.toAccountId){ alert('Choose at least one account for this transfer.'); return; }
+  if(type==='adjustment' && !entry.fromAccountId){ alert('Choose an account to adjust.'); return; }
 
   if(ui.editingId){
     const idx = state.entries.findIndex(e=>e.id===ui.editingId);
@@ -1608,6 +1685,7 @@ function resetForm(){
   $('fxRate').value = 1;
   $('category').value = state.settings.categories[0];
   $('paymentMethod').value = state.settings.paymentMethods[0];
+  $('status').value = 'posted';
   $('fromAccount').value = '';
   $('toAccount').value = '';
   $('notes').value = '';
@@ -2178,6 +2256,7 @@ window.createVariableEntry = (ruleId) => {
   $('fxRate').value = r.fxRate || 1;
   $('category').value = r.category || state.settings.categories[0];
   $('paymentMethod').value = r.paymentMethod || state.settings.paymentMethods[0];
+  $('status').value = 'posted';
   $('fromAccount').value = r.fromAccountId || '';
   $('toAccount').value = r.toAccountId || '';
   $('notes').value = r.notes || '';
@@ -2212,6 +2291,7 @@ window.editRule = (ruleId) => {
   $('fxRate').value = r.fxRate || 1;
   $('category').value = r.category || state.settings.categories[0];
   $('paymentMethod').value = r.paymentMethod || state.settings.paymentMethods[0];
+  $('status').value = 'posted';
   $('fromAccount').value = r.fromAccountId || '';
   $('toAccount').value = r.toAccountId || '';
   $('notes').value = r.notes || '';
@@ -2289,8 +2369,8 @@ function renderGraph(){
     for(let m=1;m<=12;m++) months.push(`${y}-${String(m).padStart(2,'0')}`);
   }
   const data = months.map(k => {
-    const postedIncome = state.entries.filter(e=>ymKey(e.date)===k && e.type==='income').reduce((s,e)=>s+Number(e.amountCad||0),0);
-    const postedOut = state.entries.filter(e=>ymKey(e.date)===k && e.type==='expense').reduce((s,e)=>s+Number(e.amountCad||0),0);
+    const postedIncome = state.entries.filter(e=>!isCancelledEntry(e) && ymKey(e.date)===k && e.type==='income').reduce((s,e)=>s+Number(e.amountCad||0),0);
+    const postedOut = state.entries.filter(e=>!isCancelledEntry(e) && ymKey(e.date)===k && e.type==='expense').reduce((s,e)=>s+Number(e.amountCad||0),0);
     // Only add projection where there is no posted fixed recurring instance for that occurrence.
     const projOut = projectedRecurringForPeriod('month', k)
       .filter(x=>x.rule.type==='expense' || !x.rule.type)
@@ -2520,7 +2600,7 @@ function renderCategoryPie(){
   const w = rect.width, h = 250;
   ctx.clearRect(0,0,w,h);
 
-  const actual = state.entries.filter(inSelectedPeriod).filter(e => e.type==='expense' && compareDate(e.date, todayStr()) <= 0);
+  const actual = state.entries.filter(inSelectedPeriod).filter(e => !isCancelledEntry(e) && e.type==='expense' && compareDate(e.date, todayStr()) <= 0);
   const byCat = {};
   for(const e of actual){
     byCat[e.category || 'Other'] = (byCat[e.category || 'Other'] || 0) + Number(e.amountCad || 0);
@@ -2682,7 +2762,7 @@ function accountActivityHtml(account){
         <div class="row between" style="align-items:flex-start">
           <div>
             <div><strong>${esc(e.title)}</strong></div>
-            <div class="small">${esc(e.date)} • ${esc(e.type==='transfer' ? 'Savings / transfer' : e.type)} • ${esc(direction)}</div>
+            <div class="small">${esc(e.date)} • ${esc(typeLabel(e.type))} • ${esc(direction)}</div>
           </div>
           <div style="text-align:right">
             <div>${fmt(e.amountCad)}</div>
@@ -2700,6 +2780,71 @@ function accountActivityHtml(account){
     </div>
   </div>`;
 }
+
+function renderPayCardHelper(){
+  const fromSel = $('payCardFromAccount');
+  const toSel = $('payCardToAccount');
+  if(!fromSel || !toSel) return;
+  const accounts = getSortedAccounts();
+  const nonCards = accounts.filter(a => a.type !== 'credit');
+  const cards = accounts.filter(a => a.type === 'credit');
+  const prevFrom = fromSel.value;
+  const prevTo = toSel.value;
+  fromSel.innerHTML = '<option value="">Choose account</option>' + nonCards.map(a => `<option value="${esc(a.id)}">${esc(a.name)}</option>`).join('');
+  toSel.innerHTML = '<option value="">Choose card</option>' + cards.map(a => `<option value="${esc(a.id)}">${esc(a.name)}</option>`).join('');
+  fromSel.value = prevFrom;
+  toSel.value = prevTo;
+  if($('payCardDate') && !$('payCardDate').value) $('payCardDate').value = todayStr();
+}
+function createCardPayment(){
+  const from = $('payCardFromAccount').value;
+  const to = $('payCardToAccount').value;
+  const amount = Number($('payCardAmount').value || 0);
+  const date = $('payCardDate').value || todayStr();
+  const notes = $('payCardNotes').value.trim();
+  if(!from || !to || !(amount>0)){ alert('Choose a from account, a card, and an amount.'); return; }
+  state.entries.push({
+    id: uid(), type:'transfer', date, title:`Pay off ${accountName(to) || 'card'}`,
+    originalAmount: amount, currency:'CAD', fxRate:1, amountCad: amount,
+    category: state.settings.categories.includes('Savings') ? 'Savings' : 'Other',
+    paymentMethod: state.settings.paymentMethods.includes('E-Transfer') ? 'E-Transfer' : 'Other',
+    status:'posted', fromAccountId: from, toAccountId: to, notes,
+    splits: [], splitMode:'custom'
+  });
+  $('payCardAmount').value=''; $('payCardNotes').value='';
+  saveState(false); renderAll();
+}
+function missingAccountReason(e){
+  if(e.type==='expense' && !e.fromAccountId) return 'Missing paid-from account/card';
+  if(e.type==='income' && !accountIdForEntry(e)) return 'Missing deposit account';
+  if(e.type==='transfer' && (!e.fromAccountId || !e.toAccountId)) return 'Missing from/to account';
+  if(e.type==='adjustment' && !accountIdForEntry(e)) return 'Missing account to adjust';
+  return '';
+}
+function renderUnassignedQueue(){
+  const holder = $('unassignedList');
+  if(!holder) return;
+  const items = state.entries.filter(e => !isCancelledEntry(e)).filter(e => !!missingAccountReason(e)).sort((a,b)=>a.date<b.date?1:-1).slice(0,50);
+  if(!items.length){ holder.innerHTML = '<div class="small">No unassigned transactions found.</div>'; return; }
+  holder.innerHTML = items.map(e => `<div class="item">
+    <div class="row between" style="align-items:flex-start">
+      <div>
+        <div><strong>${esc(e.title)}</strong> <span class="badge">${esc(typeLabel(e.type))}</span>${e.recurringRuleId ? ' <span class="badge">recurring</span>' : ''}</div>
+        <div class="small">${esc(e.date)} • ${fmt(e.amountCad)} • ${esc(missingAccountReason(e))}</div>
+      </div>
+      <div class="row wrap" style="justify-content:flex-end">
+        <button type="button" onclick="editEntry('${e.id}')">Assign this</button>
+        ${e.recurringRuleId ? `<button type="button" onclick="assignFutureRecurringFromEntry('${e.id}')">Future recurring</button>` : ''}
+      </div>
+    </div>
+  </div>`).join('');
+}
+window.assignFutureRecurringFromEntry = (entryId) => {
+  const e = state.entries.find(x=>x.id===entryId); if(!e || !e.recurringRuleId){ return; }
+  editEntry(entryId);
+  alert('Assign the account, keep Recurring enabled, and save. The rule will apply account changes from this occurrence forward only.');
+};
+
 function renderAccounts(){
   const totals = computeAccountTotals();
   const groups = groupAccountsByInstitution();
@@ -2725,7 +2870,7 @@ function renderAccounts(){
       </div>
       ${group.accounts.map(a => {
         const txCount = state.entries.filter(e => e.fromAccountId===a.id || e.toAccountId===a.id).length;
-        const available = a.type==='credit' && Number(a.creditLimit||0)>0 ? Math.max(0, Number(a.creditLimit||0) - a.balance) : null;
+        const available = a.type==='credit' && Number(a.creditLimit||0)>0 ? creditAvailable(a) : null;
         const util = a.type==='credit' && Number(a.creditLimit||0)>0 ? (a.balance / Number(a.creditLimit||1))*100 : null;
         return `<div class="card" style="margin:8px 0 0;padding:10px">
           <div class="row between">
@@ -2847,6 +2992,8 @@ function renderAll(){
   renderRecurring();
   renderAccountSelects();
   renderAccounts();
+  renderPayCardHelper();
+  renderUnassignedQueue();
   renderSettings();
   renderDashboardWidgets();
   renderGraph();
@@ -2884,6 +3031,7 @@ function bind(){
   $('filterCategory').addEventListener('change', renderTransactions);
   $('filterType').addEventListener('change', renderTransactions);
   $('filterAccount').addEventListener('change', renderTransactions);
+  $('filterRecurring').addEventListener('change', renderTransactions);
   $('txPrevBtn').addEventListener('click', ()=>changePeriod(-1));
   $('txNextBtn').addEventListener('click', ()=>changePeriod(1));
   $('txMonthBtn').addEventListener('click', ()=>{ ui.mode='month'; renderAll(); });
@@ -2925,6 +3073,8 @@ function bind(){
   $('cancelAccountEditBtn').addEventListener('click', ()=>{ resetAccountForm(); $('accountFormCard').classList.add('hidden'); });
   $('accountType').addEventListener('change', ()=>{ const d=inferAccountDefaults($('accountType').value); $('accountIncludeLiquid').checked=d.includeInLiquidCash; $('accountIncludeSavings').checked=d.includeInSavingsTotal; $('accountLocked').checked=d.locked; });
   $('saveAccountBtn').addEventListener('click', saveAccount);
+  if($('createCardPaymentBtn')) $('createCardPaymentBtn').addEventListener('click', createCardPayment);
+  if($('refreshUnassignedBtn')) $('refreshUnassignedBtn').addEventListener('click', renderUnassignedQueue);
   $('clearAccountFilterBtn').addEventListener('click', ()=>{ $('filterAccount').value=''; ui.tab='transactions'; renderTransactions(); switchTab('transactions'); });
   $('yourName').addEventListener('change', ()=>{ state.settings.yourName = $('yourName').value.trim() || 'Macks'; saveState(false); });
   $('backupJsonBtn').addEventListener('click', exportJson);
