@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Macks Expense Tracker v9.4.0</title>
+<title>Macks Expense Tracker v9.4.1</title>
 <style>
 :root{
   --bg:#0f172a; --panel:#111827; --panel2:#1f2937; --text:#e5e7eb; --muted:#94a3b8; --accent:#38bdf8; --green:#22c55e; --red:#ef4444; --yellow:#f59e0b; --border:#334155;
@@ -68,6 +68,139 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
 @media(min-width:700px){
   .summaryGrid{grid-template-columns:repeat(4,1fr)}
 }
+
+/* v9.5.0 UI refresh: visual only */
+:root{
+  --app-bg:#07111f;
+  --card-bg:rgba(15,23,42,.86);
+  --card-soft:rgba(30,41,59,.72);
+  --card-border:rgba(148,163,184,.20);
+  --hero-border:rgba(56,189,248,.30);
+}
+body{
+  background:
+    radial-gradient(circle at top left, rgba(56,189,248,.12), transparent 34%),
+    linear-gradient(180deg,#08111f 0%,#0b1220 48%,#07111f 100%);
+}
+header{padding:18px 18px 6px}
+header h2{font-size:29px;letter-spacing:-.03em}
+.card{
+  background:linear-gradient(180deg,rgba(15,23,42,.92),rgba(15,23,42,.78));
+  border-color:var(--card-border);
+  border-radius:22px;
+  margin:12px 12px;
+  box-shadow:0 14px 36px rgba(0,0,0,.20);
+}
+.value{letter-spacing:-.03em}
+button{
+  border-radius:16px;
+  border-color:rgba(148,163,184,.22);
+  background:rgba(15,23,42,.84);
+}
+button.primary{
+  background:linear-gradient(135deg,#38bdf8,#22d3ee);
+  box-shadow:0 8px 24px rgba(56,189,248,.20);
+}
+input,select,textarea{
+  border-radius:16px;
+  border-color:rgba(148,163,184,.22);
+  background:rgba(15,23,42,.82);
+}
+.nav{
+  background:rgba(8,17,31,.94);
+  backdrop-filter:blur(18px);
+  border-top-color:rgba(148,163,184,.18);
+  gap:7px;
+}
+.nav button{
+  border-radius:18px;
+  border-color:rgba(148,163,184,.16);
+}
+.nav button.active{
+  background:linear-gradient(135deg,#38bdf8,#22d3ee);
+  color:#06111f;
+}
+.badge{
+  border-color:rgba(148,163,184,.22);
+  background:rgba(15,23,42,.72);
+}
+.ui-hero{
+  grid-column:1/-1;
+  margin:0;
+  padding:18px;
+  border:1px solid var(--hero-border);
+  border-radius:28px;
+  background:
+    radial-gradient(circle at top right,rgba(56,189,248,.22),transparent 38%),
+    linear-gradient(135deg,rgba(14,165,233,.17),rgba(15,23,42,.92) 58%,rgba(2,6,23,.92));
+  box-shadow:0 20px 44px rgba(0,0,0,.30);
+}
+.ui-hero-label{font-size:13px;color:#cbd5e1}
+.ui-hero-value{font-size:34px;font-weight:800;letter-spacing:-.055em;margin-top:3px}
+.ui-hero-sub{font-size:13px;color:#94a3b8;margin-top:8px;line-height:1.35}
+.quickActions{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:8px;
+  margin-top:16px;
+}
+.quickActions button{
+  padding:10px 6px;
+  font-size:12px;
+  background:rgba(2,6,23,.42);
+  border-color:rgba(148,163,184,.18);
+}
+.summaryGrid .card{
+  margin:0;
+  border-radius:20px;
+  box-shadow:none;
+}
+.txSummary{
+  margin:0 0 12px;
+  padding:12px;
+  border:1px solid rgba(148,163,184,.18);
+  border-radius:20px;
+  background:rgba(2,6,23,.30);
+}
+.txSummaryGrid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:8px;
+  margin-top:10px;
+}
+.txMini{
+  border-radius:15px;
+  background:rgba(15,23,42,.80);
+  padding:9px 6px;
+  text-align:center;
+}
+.txRow{
+  padding:12px 0;
+  border-top:1px solid rgba(148,163,184,.13);
+}
+.txRow:first-child{border-top:none}
+.txAmount{font-size:18px;font-weight:800;letter-spacing:-.03em}
+.tone-income{color:#86efac}
+.tone-expense{color:#fca5a5}
+.tone-transfer{color:#7dd3fc}
+.tone-adjustment{color:#c4b5fd}
+.badge.income{background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.28);color:#86efac}
+.badge.expense{background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.28);color:#fca5a5}
+.badge.transfer{background:rgba(56,189,248,.12);border-color:rgba(56,189,248,.28);color:#7dd3fc}
+.badge.adjustment{background:rgba(167,139,250,.12);border-color:rgba(167,139,250,.28);color:#c4b5fd}
+.badge.pending{background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.28);color:#fcd34d}
+.actionDots{
+  width:38px;height:38px;
+  display:inline-flex;align-items:center;justify-content:center;
+  border-radius:999px;
+  padding:0;
+}
+@media(max-width:430px){
+  header h2{font-size:26px}
+  .ui-hero-value{font-size:30px}
+  .quickActions button{font-size:11px;padding:9px 3px}
+}
+
 </style>
 </head>
 <body>
@@ -267,6 +400,7 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
       <h3>Transactions</h3>
       <button id="txUseDashboardBtn" type="button">Match dashboard</button>
     </div>
+    <div id="transactionsSummary" class="summaryGrid" style="margin:10px 0"></div>
     <div id="transactionsList"></div>
   </div>
 </section>
@@ -440,7 +574,7 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
 
 <script>
 (() => {
-const VERSION = 'v9.4.0';
+const VERSION = 'v9.4.1';
 const STORAGE_KEY = 'macks-expense-tracker-v9_2';
 const AUTO_KEY = 'macks-expense-tracker-v9_2-autobackups';
 const CAD_RATES = { CAD:1, USD:1.36, EUR:1.48, GBP:1.73, JPY:0.0092, MXN:0.080 };
@@ -1325,12 +1459,27 @@ function computePeriodSummary(){
 function renderSummaryCards(){
   const s = computePeriodSummary();
   const acct = computeAccountTotals();
+  const hero = `<div class="ui-hero">
+    <div class="row between" style="align-items:flex-start">
+      <div>
+        <div class="ui-hero-label">Current position</div>
+        <div class="ui-hero-value">${fmt(s.currentPosition)}</div>
+        <div class="ui-hero-sub">Liquid cash ${fmt(acct.liquid)} • Card debt ${fmt(acct.debt)} • Upcoming ${fmt(s.upcomingScheduled)}</div>
+      </div>
+      <span class="badge transfer">${esc(ui.mode==='month' ? 'Month' : 'Year')}</span>
+    </div>
+    <div class="quickActions">
+      <button type="button" onclick="quickAdd('expense')">+ Expense</button>
+      <button type="button" onclick="quickAdd('income')">+ Income</button>
+      <button type="button" onclick="quickAdd('transfer')">Transfer</button>
+      <button type="button" onclick="switchTab('accounts')">Pay card</button>
+    </div>
+  </div>`;
   const cards = [
     ['Income', s.income, 'positive'],
     ['Expenses', s.outflow, 'negative'],
     ['Savings this month', s.savings, ''],
     ['Still owed to you', s.outstanding, ''],
-    ['Current position', s.currentPosition, ''],
     ['Upcoming scheduled', s.upcomingScheduled, ''],
     ['Recharge reminders', s.rechargeDue, ''],
     ['Liquid cash', acct.liquid, ''],
@@ -1338,12 +1487,13 @@ function renderSummaryCards(){
     ['Card debt', acct.debt, 'negative'],
     ['Net worth view', acct.netWorth, '']
   ];
-  $('summaryCards').innerHTML = cards.map(([label,val,cls]) => `
-    <div class="card" style="margin:0;padding:10px">
+  $('summaryCards').innerHTML = hero + cards.map(([label,val,cls]) => `
+    <div class="card" style="padding:12px">
       <div class="small">${label}</div>
       <div class="value ${cls}" style="font-size:18px">${fmt(val)}</div>
     </div>`).join('');
 }
+
 
 
 function typeLabel(type){
@@ -1361,6 +1511,137 @@ function accountLine(e){
   return `${e.fromAccountId ? 'From: ' + esc(accountName(e.fromAccountId)) : ''}${e.toAccountId ? (e.fromAccountId ? ' • ' : '') + 'To: ' + esc(accountName(e.toAccountId)) : ''}`;
 }
 
+function getTransactionAccountImpact(e, accountId){
+  if(!accountId || isCancelledEntry(e)) return 0;
+  const amt = Number(e.amountCad || 0);
+  const acc = getAccountById(accountId);
+  const isCredit = acc?.type === 'credit';
+  if(e.type === 'expense'){
+    if((e.fromAccountId || e.accountId || '') !== accountId) return 0;
+    return isCredit ? amt : -amt;
+  }
+  if(e.type === 'income'){
+    if(accountIdForEntry(e) !== accountId) return 0;
+    return isCredit ? -amt : amt;
+  }
+  if(e.type === 'transfer'){
+    let delta = 0;
+    if(e.fromAccountId === accountId) delta -= amt;
+    if(e.toAccountId === accountId) delta += isCredit ? -amt : amt;
+    return delta;
+  }
+  if(e.type === 'adjustment'){
+    return accountIdForEntry(e) === accountId ? amt : 0;
+  }
+  return 0;
+}
+
+function renderTransactionSummary(items, selectedAccountId=''){
+  const holder = $('transactionsSummary');
+  if(!holder) return;
+  const active = items.filter(e => !isCancelledEntry(e));
+  const income = active.filter(e=>e.type==='income').reduce((s,e)=>s+Number(e.amountCad||0),0);
+  const expenses = active.filter(e=>e.type==='expense').reduce((s,e)=>s+Number(e.amountCad||0),0);
+  const transfers = active.filter(e=>e.type==='transfer').reduce((s,e)=>s+Number(e.amountCad||0),0);
+  const adjustments = active.filter(e=>e.type==='adjustment').reduce((s,e)=>s+Number(e.amountCad||0),0);
+  const cancelled = items.length - active.length;
+  const accountImpact = selectedAccountId ? active.reduce((s,e)=>s+getTransactionAccountImpact(e, selectedAccountId),0) : null;
+  const netCashflow = income - expenses - transfers + adjustments;
+  const cards = selectedAccountId ? [
+    ['Displayed count', active.length + (cancelled ? ` + ${cancelled} cancelled` : ''), ''],
+    ['Account impact', accountImpact, accountImpact >= 0 ? 'positive' : 'negative'],
+    ['Income shown', income, 'positive'],
+    ['Expenses shown', expenses, 'negative'],
+    ['Transfers shown', transfers, ''],
+    ['Adjustments shown', adjustments, adjustments >= 0 ? '' : 'negative']
+  ] : [
+    ['Displayed count', active.length + (cancelled ? ` + ${cancelled} cancelled` : ''), ''],
+    ['Income shown', income, 'positive'],
+    ['Expenses shown', expenses, 'negative'],
+    ['Transfers shown', transfers, ''],
+    ['Adjustments shown', adjustments, adjustments >= 0 ? '' : 'negative'],
+    ['Net displayed cashflow', netCashflow, netCashflow >= 0 ? 'positive' : 'negative']
+  ];
+  holder.innerHTML = cards.map(([label,val,cls]) => `
+    <div class="card" style="margin:0;padding:10px">
+      <div class="small">${label}</div>
+      <div class="value ${cls}" style="font-size:16px">${typeof val === 'number' ? fmt(val) : esc(val)}</div>
+    </div>`).join('');
+}
+
+
+function txToneClass(type){
+  if(type==='income') return 'income';
+  if(type==='expense') return 'expense';
+  if(type==='transfer') return 'transfer';
+  if(type==='adjustment') return 'adjustment';
+  return '';
+}
+function txAmountClass(type, amount){
+  if(type==='income') return 'tone-income';
+  if(type==='expense') return 'tone-expense';
+  if(type==='transfer') return 'tone-transfer';
+  if(type==='adjustment') return 'tone-adjustment';
+  return Number(amount||0) >= 0 ? 'tone-income' : 'tone-expense';
+}
+function renderDisplayedTotals(items, accountId=''){
+  let income=0, expenses=0, transfersOut=0, transfersIn=0, transfersTotal=0, adjustments=0, net=0;
+  for(const e of items){
+    const amt = Number(e.amountCad || 0);
+    if(e.type==='income'){
+      income += amt;
+      if(!accountId || accountIdForEntry(e)===accountId) net += amt;
+    } else if(e.type==='expense'){
+      expenses += amt;
+      if(!accountId || e.fromAccountId===accountId){
+        const acc = getAccountById(accountId || e.fromAccountId);
+        net += acc?.type==='credit' ? amt : -amt;
+      }
+    } else if(e.type==='transfer'){
+      transfersTotal += amt;
+      if(accountId){
+        if(e.fromAccountId===accountId){ transfersOut += amt; net -= amt; }
+        if(e.toAccountId===accountId){
+          transfersIn += amt;
+          const acc = getAccountById(accountId);
+          net += acc?.type==='credit' ? -amt : amt;
+        }
+      } else {
+        net -= amt;
+      }
+    } else if(e.type==='adjustment'){
+      adjustments += amt;
+      if(!accountId || accountIdForEntry(e)===accountId) net += amt;
+    }
+  }
+  const transferLabel = accountId ? `Out ${fmt(transfersOut)} • In ${fmt(transfersIn)}` : fmt(transfersTotal);
+  return `<div class="txSummary">
+    <div class="row between">
+      <div>
+        <div class="small">Displayed transactions</div>
+        <div class="value" style="font-size:22px">${fmt(net)}</div>
+      </div>
+      <span class="badge">${items.length} item${items.length===1?'':'s'}</span>
+    </div>
+    <div class="txSummaryGrid">
+      <div class="txMini"><div class="small">Income</div><div class="tone-income">${fmt(income)}</div></div>
+      <div class="txMini"><div class="small">Expenses</div><div class="tone-expense">${fmt(expenses)}</div></div>
+      <div class="txMini"><div class="small">Transfers</div><div class="tone-transfer">${transferLabel}</div></div>
+      <div class="txMini"><div class="small">Adjustments</div><div class="tone-adjustment">${fmt(adjustments)}</div></div>
+      <div class="txMini"><div class="small">${accountId ? 'Account impact' : 'Net displayed'}</div><div>${fmt(net)}</div></div>
+      <div class="txMini"><div class="small">Period</div><div>${esc(currentPeriodLabel())}</div></div>
+    </div>
+  </div>`;
+}
+function quickAdd(type){
+  switchTab('add');
+  resetForm();
+  $('type').value = type;
+  if(type==='income') $('title').value = 'Pay';
+  syncTypeUi();
+}
+window.quickAdd = quickAdd;
+
 function renderTransactions(){
   $('txPeriodLabel').textContent = currentPeriodLabel();
   $('txMonthBtn').classList.toggle('primary', ui.mode==='month');
@@ -1373,45 +1654,56 @@ function renderTransactions(){
   const items = state.entries
     .filter(inSelectedPeriod)
     .filter(e => !cat || e.category===cat)
-.filter(e => !typ || e.type===typ)
-    .filter(e => !acc || e.fromAccountId===acc || e.toAccountId===acc)
+    .filter(e => !typ || e.type===typ)
+    .filter(e => !acc || e.fromAccountId===acc || e.toAccountId===acc || accountIdForEntry(e)===acc)
     .filter(e => recurringFilter==='recurring' ? !!e.recurringRuleId : recurringFilter==='nonrecurring' ? !e.recurringRuleId : true)
     .filter(e => {
       if(!q) return true;
-      const blob = [e.title, e.notes, e.category, e.paymentMethod, ...(e.splits||[]).map(s=>s.person)].join(' ').toLowerCase();
+      const blob = [e.title, e.notes, e.category, e.paymentMethod, accountLine(e), ...(e.splits||[]).map(s=>s.person)].join(' ').toLowerCase();
       return blob.includes(q);
     })
     .sort((a,b)=>a.date<b.date?1:-1);
 
-  if(!items.length){ $('transactionsList').innerHTML = `<div class="small">No transactions in this period.</div>`; return; }
-  $('transactionsList').innerHTML = items.map(e => {
+  if(!items.length){
+    $('transactionsList').innerHTML = `<div class="txSummary"><div class="small">Displayed transactions</div><div class="value" style="font-size:20px">${fmt(0)}</div><div class="small">No transactions in this period.</div></div>`;
+    return;
+  }
+  $('transactionsList').innerHTML = renderDisplayedTotals(items, acc) + items.map(e => {
     const splitSummary = (e.splits||[]).length ? `<div class="small">Splits: ${(e.splits||[]).map(s => {
       const eff = getEffectiveSplitStatus(e, s);
       const tag = s.mode==='credit' ? `(prepaid ${fmt(eff._prepaidRemaining)})` : s.mode==='nocharge'?'(no charge)':s.mode==='mine'?'(me)':s.repaid?'(repaid)':'';
       return `${esc(s.person)} ${fmt(eff._displayRemaining||0)} ${tag}`;
     }).join(', ')}</div>` : '';
     const fx = e.currency && e.currency!=='CAD' ? `<div class="small">${Number(e.originalAmount||0)} ${esc(e.currency)} @ ${Number(e.fxRate||1)}</div>` : '';
-    return `<div class="item">
-      <div class="row between">
-        <div>
-          <div><strong>${esc(e.title)}</strong> <span class="badge">${esc(typeLabel(e.type))}</span> <span class="badge">${esc(statusLabel(e.status))}</span>${e.recurringRuleId ? ' <span class="badge">recurring</span>' : ''}</div>
-          <div class="small">${esc(e.date)} • ${compareDate(e.date, todayStr()) > 0 ? 'Upcoming' : 'Occurred'} • ${esc(e.category||'')} • ${esc(e.paymentMethod||'')}</div>
+    const tone = txToneClass(e.type);
+    const statusTone = (e.status && e.status !== 'posted') ? ' pending' : '';
+    return `<div class="txRow">
+      <div class="row between" style="align-items:flex-start">
+        <div style="min-width:0">
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            <strong style="font-size:16px">${esc(e.title)}</strong>
+            <span class="badge ${tone}">${esc(typeLabel(e.type))}</span>
+            <span class="badge${statusTone}">${esc(statusLabel(e.status))}</span>
+            ${e.recurringRuleId ? '<span class="badge">recurring</span>' : ''}
+          </div>
+          <div class="small" style="margin-top:4px">${esc(e.date)} • ${compareDate(e.date, todayStr()) > 0 ? 'Upcoming' : 'Occurred'} • ${esc(e.category||'')} • ${esc(e.paymentMethod||'')}</div>
           <div class="small">${accountLine(e)}</div>
           ${fx}
           ${splitSummary}
           ${e.notes ? `<div class="small">${esc(e.notes)}</div>` : ''}
         </div>
-        <div style="text-align:right">
-          <div class="value" style="font-size:17px">${fmt(e.amountCad)}</div>
-          <div class="row" style="justify-content:flex-end;margin-top:8px">
-            <button type="button" onclick="editEntry('${e.id}')">Edit</button>
-            <button type="button" class="danger" onclick="deleteEntry('${e.id}')">Delete</button>
+        <div style="text-align:right;flex-shrink:0">
+          <div class="txAmount ${txAmountClass(e.type, e.amountCad)}">${fmt(e.amountCad)}</div>
+          <div class="row" style="justify-content:flex-end;margin-top:7px">
+            <button type="button" class="actionDots" onclick="editEntry('${e.id}')" title="Edit">✎</button>
+            <button type="button" class="actionDots danger" onclick="deleteEntry('${e.id}')" title="Delete">×</button>
           </div>
         </div>
       </div>
     </div>`;
   }).join('');
 }
+
 
 window.editEntry = (id) => {
   const e = state.entries.find(x => x.id===id);
