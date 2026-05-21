@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Macks Expense Tracker v9.4.1</title>
+<title>Macks Expense Tracker v9.4.0</title>
 <style>
 :root{
   --bg:#0f172a; --panel:#111827; --panel2:#1f2937; --text:#e5e7eb; --muted:#94a3b8; --accent:#38bdf8; --green:#22c55e; --red:#ef4444; --yellow:#f59e0b; --border:#334155;
@@ -267,7 +267,6 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
       <h3>Transactions</h3>
       <button id="txUseDashboardBtn" type="button">Match dashboard</button>
     </div>
-    <div id="transactionsSummary" class="summaryGrid" style="margin:10px 0"></div>
     <div id="transactionsList"></div>
   </div>
 </section>
@@ -441,7 +440,7 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
 
 <script>
 (() => {
-const VERSION = 'v9.4.1';
+const VERSION = 'v9.4.0';
 const STORAGE_KEY = 'macks-expense-tracker-v9_2';
 const AUTO_KEY = 'macks-expense-tracker-v9_2-autobackups';
 const CAD_RATES = { CAD:1, USD:1.36, EUR:1.48, GBP:1.73, JPY:0.0092, MXN:0.080 };
@@ -1362,64 +1361,6 @@ function accountLine(e){
   return `${e.fromAccountId ? 'From: ' + esc(accountName(e.fromAccountId)) : ''}${e.toAccountId ? (e.fromAccountId ? ' • ' : '') + 'To: ' + esc(accountName(e.toAccountId)) : ''}`;
 }
 
-function getTransactionAccountImpact(e, accountId){
-  if(!accountId || isCancelledEntry(e)) return 0;
-  const amt = Number(e.amountCad || 0);
-  const acc = getAccountById(accountId);
-  const isCredit = acc?.type === 'credit';
-  if(e.type === 'expense'){
-    if((e.fromAccountId || e.accountId || '') !== accountId) return 0;
-    return isCredit ? amt : -amt;
-  }
-  if(e.type === 'income'){
-    if(accountIdForEntry(e) !== accountId) return 0;
-    return isCredit ? -amt : amt;
-  }
-  if(e.type === 'transfer'){
-    let delta = 0;
-    if(e.fromAccountId === accountId) delta -= amt;
-    if(e.toAccountId === accountId) delta += isCredit ? -amt : amt;
-    return delta;
-  }
-  if(e.type === 'adjustment'){
-    return accountIdForEntry(e) === accountId ? amt : 0;
-  }
-  return 0;
-}
-
-function renderTransactionSummary(items, selectedAccountId=''){
-  const holder = $('transactionsSummary');
-  if(!holder) return;
-  const active = items.filter(e => !isCancelledEntry(e));
-  const income = active.filter(e=>e.type==='income').reduce((s,e)=>s+Number(e.amountCad||0),0);
-  const expenses = active.filter(e=>e.type==='expense').reduce((s,e)=>s+Number(e.amountCad||0),0);
-  const transfers = active.filter(e=>e.type==='transfer').reduce((s,e)=>s+Number(e.amountCad||0),0);
-  const adjustments = active.filter(e=>e.type==='adjustment').reduce((s,e)=>s+Number(e.amountCad||0),0);
-  const cancelled = items.length - active.length;
-  const accountImpact = selectedAccountId ? active.reduce((s,e)=>s+getTransactionAccountImpact(e, selectedAccountId),0) : null;
-  const netCashflow = income - expenses - transfers + adjustments;
-  const cards = selectedAccountId ? [
-    ['Displayed count', active.length + (cancelled ? ` + ${cancelled} cancelled` : ''), ''],
-    ['Account impact', accountImpact, accountImpact >= 0 ? 'positive' : 'negative'],
-    ['Income shown', income, 'positive'],
-    ['Expenses shown', expenses, 'negative'],
-    ['Transfers shown', transfers, ''],
-    ['Adjustments shown', adjustments, adjustments >= 0 ? '' : 'negative']
-  ] : [
-    ['Displayed count', active.length + (cancelled ? ` + ${cancelled} cancelled` : ''), ''],
-    ['Income shown', income, 'positive'],
-    ['Expenses shown', expenses, 'negative'],
-    ['Transfers shown', transfers, ''],
-    ['Adjustments shown', adjustments, adjustments >= 0 ? '' : 'negative'],
-    ['Net displayed cashflow', netCashflow, netCashflow >= 0 ? 'positive' : 'negative']
-  ];
-  holder.innerHTML = cards.map(([label,val,cls]) => `
-    <div class="card" style="margin:0;padding:10px">
-      <div class="small">${label}</div>
-      <div class="value ${cls}" style="font-size:16px">${typeof val === 'number' ? fmt(val) : esc(val)}</div>
-    </div>`).join('');
-}
-
 function renderTransactions(){
   $('txPeriodLabel').textContent = currentPeriodLabel();
   $('txMonthBtn').classList.toggle('primary', ui.mode==='month');
@@ -1442,7 +1383,6 @@ function renderTransactions(){
     })
     .sort((a,b)=>a.date<b.date?1:-1);
 
-  renderTransactionSummary(items, acc);
   if(!items.length){ $('transactionsList').innerHTML = `<div class="small">No transactions in this period.</div>`; return; }
   $('transactionsList').innerHTML = items.map(e => {
     const splitSummary = (e.splits||[]).length ? `<div class="small">Splits: ${(e.splits||[]).map(s => {
