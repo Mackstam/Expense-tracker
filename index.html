@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#07111f" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<title>Macks Expense Tracker v9.5.5</title>
+<title>Macks Expense Tracker v9.5.7</title>
 <style>
 :root{
   --bg:#0f172a; --panel:#111827; --panel2:#1f2937; --text:#e5e7eb; --muted:#94a3b8; --accent:#38bdf8; --green:#22c55e; --red:#ef4444; --yellow:#f59e0b; --border:#334155;
@@ -592,7 +592,7 @@ input,select,textarea{
 
 <script>
 (() => {
-const VERSION = 'v9.5.5';
+const VERSION = 'v9.5.7';
 const STORAGE_KEY = 'macks-expense-tracker-v9_2';
 const AUTO_KEY = 'macks-expense-tracker-v9_2-autobackups';
 const CAD_RATES = { CAD:1, USD:1.36, EUR:1.48, GBP:1.73, JPY:0.0092, MXN:0.080 };
@@ -891,12 +891,20 @@ function saveState(showToast=true){
   createAutoBackup();
   if(showToast){ setSaveToast('Saved'); }
 }
-function createAutoBackup(){
+function createAutoBackup(force=false){
   try{
+    const now = Date.now();
+    const last = Number(state?.meta?.lastAutoBackupAtMs || 0);
+    // Performance: do not rewrite 8 full backup copies on every tiny save.
+    // Keep regular protection, but throttle automatic backups to about once per minute.
+    if(!force && last && now - last < 60000) return;
     const backups = JSON.parse(localStorage.getItem(AUTO_KEY)||'[]');
-    backups.unshift({ ts: new Date().toISOString(), data: state });
-    localStorage.setItem(AUTO_KEY, JSON.stringify(backups.slice(0,8)));
-  }catch(e){}
+    backups.unshift({ ts: new Date(now).toISOString(), data: state });
+    state.meta = state.meta || {};
+    state.meta.lastAutoBackupAtMs = now;
+    state.meta.lastAutoBackupAt = new Date(now).toISOString();
+    localStorage.setItem(AUTO_KEY, JSON.stringify(backups.slice(0,6)));
+  }catch(e){ console.warn('Auto backup skipped', e); }
 }
 function setSaveToast(text){
   $('saveToast').textContent = text;
@@ -909,6 +917,21 @@ function showAppToast(text){
   el.classList.add('show');
   clearTimeout(showAppToast._timer);
   showAppToast._timer = setTimeout(()=>el.classList.remove('show'), 2200);
+}
+
+function resetSaveButtons(){
+  const entryBtn = $('saveEntryBtn');
+  if(entryBtn){
+    entryBtn.dataset.saving = '0';
+    entryBtn.disabled = false;
+    entryBtn.textContent = 'Save entry';
+  }
+  const accountBtn = $('saveAccountBtn');
+  if(accountBtn){
+    accountBtn.dataset.saving = '0';
+    accountBtn.disabled = false;
+    accountBtn.textContent = 'Save account';
+  }
 }
 
 function syncCategoryForType(){
@@ -1809,7 +1832,7 @@ window.deleteEntry = (id) => {
   renderTransactions();
   showAppToast('Transaction deleted');
   requestAnimationFrame(() => {
-    renderAll();
+    try { renderAll(); } catch (err) { console.error('Post-delete refresh failed', err); }
     showAppToast('Transaction deleted');
   });
 };
@@ -2005,16 +2028,24 @@ function saveEntry(){
   const wasEditing = !!ui.editingId;
   const toastText = wasEditing ? 'Transaction updated' : 'Transaction added';
 
-  // Give immediate visual feedback before heavier recalculation/rendering work runs.
-  saveState(false);
+  // Immediate visual completion. Do this before any heavier rendering can block or fail.
+  try {
+    saveState(false);
+  } catch (err) {
+    console.error('Transaction saveState failed', err);
+    restoreSaveEntryButton();
+    alert('The transaction could not be saved. Try exporting a backup, then clearing older auto backups if storage is full.');
+    return;
+  }
+
   resetForm();
+  restoreSaveEntryButton();
   switchTab('transactions');
   if($('searchTx')) $('searchTx').value = '';
   if($('filterType')) $('filterType').value = '';
   if($('filterRecurring')) $('filterRecurring').value = '';
   showAppToast(toastText);
-  renderTransactions();
-  restoreSaveEntryButton();
+  try { renderTransactions(); } catch (err) { console.error('Immediate transaction render failed', err); }
   window.scrollTo({top:0, behavior:'smooth'});
 
   requestAnimationFrame(() => {
@@ -2024,14 +2055,15 @@ function saveEntry(){
       showAppToast(toastText);
     } catch (err) {
       console.error('Post-save transaction refresh failed', err);
-      showAppToast(toastText + ' — refresh later');
+      showAppToast(toastText + ' — saved, refresh later');
     } finally {
-      restoreSaveEntryButton();
+      resetSaveButtons();
     }
   });
 }
 
 function resetForm(){
+  resetSaveButtons();
   ui.editingId = null;
   ui.editingRecurringId = null;
   $('entryFormTitle').textContent = 'Add entry';
@@ -3020,6 +3052,7 @@ function renderCategoryPie(){
 
 
 function resetAccountForm(){
+  resetSaveButtons();
   ui.accountEditingId = null;
   $('accountFormTitle').textContent = 'Add account';
   $('accountName').value='';
@@ -3067,25 +3100,42 @@ function saveAccount(){
   const i = state.accounts.findIndex(a => a.id===acct.id);
   if(i>=0) state.accounts[i]=acct; else state.accounts.push(acct);
   normalizeAccountOrder();
-  saveState(false);
-  renderAccountSelects();
+  const toastText = wasEditing ? 'Account updated' : 'Account added';
+
+  try {
+    saveState(false);
+  } catch (err) {
+    console.error('Account saveState failed', err);
+    restoreSaveAccountButton();
+    alert('The account could not be saved. Try exporting a backup, then clearing older auto backups if storage is full.');
+    return;
+  }
+
+  // Immediate visual completion. Do this before any heavier rendering can block or fail.
   $('accountFormCard').classList.add('hidden');
   resetAccountForm();
-  renderAccounts();
-  renderPayCardHelper();
-  renderUnassignedQueue();
-  showAppToast(wasEditing ? 'Account updated' : 'Account added');
   restoreSaveAccountButton();
+  showAppToast(toastText);
+
+  try {
+    renderAccountSelects();
+    renderAccounts();
+    renderPayCardHelper();
+    renderUnassignedQueue();
+  } catch (err) {
+    console.error('Immediate account render failed', err);
+  }
+
   requestAnimationFrame(() => {
     try {
       renderAll();
       switchTab('accounts');
-      showAppToast(wasEditing ? 'Account updated' : 'Account added');
+      showAppToast(toastText);
     } catch (err) {
       console.error('Post-save account refresh failed', err);
-      showAppToast((wasEditing ? 'Account updated' : 'Account added') + ' — refresh later');
+      showAppToast(toastText + ' — saved, refresh later');
     } finally {
-      restoreSaveAccountButton();
+      resetSaveButtons();
     }
   });
 }
@@ -3374,6 +3424,7 @@ function switchTab(tab){
   document.querySelectorAll('.tab').forEach(el => el.classList.add('hidden'));
   $('tab-'+tab).classList.remove('hidden');
   document.querySelectorAll('.nav button').forEach(btn => btn.classList.toggle('active', btn.dataset.tab===tab));
+  try { renderCurrentTab(); } catch (err) { console.error('Tab render failed', err); }
 }
 function updateModeButtons(){
   $('modeMonthBtn').classList.toggle('primary', ui.mode==='month');
@@ -3386,23 +3437,60 @@ function changePeriod(dir){
   renderAll();
 }
 
+function renderChartsForDashboard(){
+  const cfg = state.settings.dashboard || {};
+  if(ui.tab !== 'dashboard') return;
+  requestAnimationFrame(() => {
+    if(ui.tab !== 'dashboard') return;
+    if(cfg.showGraph !== false && !$('dashboardGraphCard')?.classList.contains('hidden')) renderGraph();
+    if(cfg.showCategoryChart !== false && !$('dashboardCategoryCard')?.classList.contains('hidden')) renderCategoryPie();
+  });
+}
+
+function renderCurrentTab(){
+  if($('versionBadge')) $('versionBadge').textContent = VERSION;
+  if(ui.tab === 'dashboard'){
+    updateModeButtons();
+    renderSummaryCards();
+    renderDashboardWidgets();
+    renderChartsForDashboard();
+    return;
+  }
+  if(ui.tab === 'transactions'){
+    renderTransactions();
+    return;
+  }
+  if(ui.tab === 'accounts'){
+    renderAccountSelects();
+    renderAccounts();
+    renderPayCardHelper();
+    renderUnassignedQueue();
+    return;
+  }
+  if(ui.tab === 'people'){
+    renderPeople();
+    return;
+  }
+  if(ui.tab === 'recurring'){
+    renderRecurring();
+    return;
+  }
+  if(ui.tab === 'settings'){
+    renderSettings();
+    return;
+  }
+  if(ui.tab === 'add'){
+    renderAccountSelects();
+    return;
+  }
+}
+
 function renderAll(){
   const repairedBackfill = repairHistoricalRecurringAccountBackfill();
   const changed = ensureRecurringEntriesToToday() || repairedBackfill;
   updateModeButtons();
-  renderSummaryCards();
-  renderTransactions();
-  renderPeople();
-  renderRecurring();
-  renderAccountSelects();
-  renderAccounts();
-  renderPayCardHelper();
-  renderUnassignedQueue();
-  renderSettings();
-  renderDashboardWidgets();
-  renderGraph();
-  renderCategoryPie();
-  requestAnimationFrame(() => { renderGraph(); renderCategoryPie(); });
+  renderCurrentTab();
+  resetSaveButtons();
   if(changed) saveState(false);
 }
 
