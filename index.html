@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#07111f" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<title>Macks Expense Tracker v9.5.1</title>
+<title>Macks Expense Tracker v9.5.2</title>
 <style>
 :root{
   --bg:#0f172a; --panel:#111827; --panel2:#1f2937; --text:#e5e7eb; --muted:#94a3b8; --accent:#38bdf8; --green:#22c55e; --red:#ef4444; --yellow:#f59e0b; --border:#334155;
@@ -592,7 +592,7 @@ input,select,textarea{
 
 <script>
 (() => {
-const VERSION = 'v9.5.1';
+const VERSION = 'v9.5.2';
 const STORAGE_KEY = 'macks-expense-tracker-v9_2';
 const AUTO_KEY = 'macks-expense-tracker-v9_2-autobackups';
 const CAD_RATES = { CAD:1, USD:1.36, EUR:1.48, GBP:1.73, JPY:0.0092, MXN:0.080 };
@@ -1984,12 +1984,23 @@ function saveEntry(){
     assignIncomeToRecurring(state.entries.find(e => e.id===entry.id) || entry);
   }
   const wasEditing = !!ui.editingId;
+  const toastText = wasEditing ? 'Transaction updated' : 'Transaction added';
+
+  // Give immediate visual feedback before heavier recalculation/rendering work runs.
   saveState(false);
   resetForm();
-  renderAll();
   switchTab('transactions');
+  if($('searchTx')) $('searchTx').value = '';
+  if($('filterType')) $('filterType').value = '';
+  if($('filterRecurring')) $('filterRecurring').value = '';
+  showAppToast(toastText);
   window.scrollTo({top:0, behavior:'smooth'});
-  showAppToast(wasEditing ? 'Transaction updated' : 'Transaction added');
+
+  requestAnimationFrame(() => {
+    renderAll();
+    switchTab('transactions');
+    showAppToast(toastText);
+  });
 }
 
 function resetForm(){
