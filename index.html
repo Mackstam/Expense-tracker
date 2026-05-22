@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#07111f" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<title>Macks Expense Tracker v9.5.2</title>
+<title>Macks Expense Tracker v9.5.3</title>
 <style>
 :root{
   --bg:#0f172a; --panel:#111827; --panel2:#1f2937; --text:#e5e7eb; --muted:#94a3b8; --accent:#38bdf8; --green:#22c55e; --red:#ef4444; --yellow:#f59e0b; --border:#334155;
@@ -592,7 +592,7 @@ input,select,textarea{
 
 <script>
 (() => {
-const VERSION = 'v9.5.2';
+const VERSION = 'v9.5.3';
 const STORAGE_KEY = 'macks-expense-tracker-v9_2';
 const AUTO_KEY = 'macks-expense-tracker-v9_2-autobackups';
 const CAD_RATES = { CAD:1, USD:1.36, EUR:1.48, GBP:1.73, JPY:0.0092, MXN:0.080 };
@@ -1805,8 +1805,13 @@ window.deleteEntry = (id) => {
   }
 
   state.entries = state.entries.filter(e => e.id!==id);
-  saveState();
-  renderAll();
+  saveState(false);
+  renderTransactions();
+  showAppToast('Transaction deleted');
+  requestAnimationFrame(() => {
+    renderAll();
+    showAppToast('Transaction deleted');
+  });
 };
 
 function renderSplitRows(rows=[]){
@@ -1852,10 +1857,24 @@ function maybeNormalizeSelfShare(s){
   return s;
 }
 function saveEntry(){
+  const saveBtn = $('saveEntryBtn');
+  if(saveBtn?.dataset.saving === '1') return;
+  if(saveBtn){
+    saveBtn.dataset.saving = '1';
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+  }
+  const restoreSaveEntryButton = () => {
+    if(saveBtn){
+      saveBtn.dataset.saving = '0';
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save entry';
+    }
+  };
   const type = $('type').value;
   const date = $('date').value || todayStr();
   const title = $('title').value.trim();
-  if(!title){ alert('Please enter a title.'); return; }
+  if(!title){ restoreSaveEntryButton(); alert('Please enter a title.'); return; }
   const originalAmount = Number($('amount').value||0);
   const currency = $('currency').value;
   const fxRate = Number($('fxRate').value||1);
@@ -1881,7 +1900,7 @@ function saveEntry(){
     } else {
       evenPeopleCount = Number($('evenPeopleCount').value||0);
       includeSelf = $('includeSelf').value==='yes';
-      if(evenPeopleCount < 2){ alert('Even split needs at least 2 people.'); return; }
+      if(evenPeopleCount < 2){ restoreSaveEntryButton(); alert('Even split needs at least 2 people.'); return; }
       const share = Number((amountCad / evenPeopleCount).toFixed(2));
       const owedCount = includeSelf ? evenPeopleCount - 1 : evenPeopleCount;
       const existingRows = collectSplitRows();
@@ -1911,8 +1930,8 @@ function saveEntry(){
     type, date, title, originalAmount, currency, fxRate, amountCad, category, paymentMethod, status, fromAccountId, toAccountId: type==='transfer' ? toAccountId : '', notes,
     splits, splitMode, evenPeopleCount, includeSelf
   };
-  if(type==='transfer' && !entry.fromAccountId && !entry.toAccountId){ alert('Choose at least one account for this transfer.'); return; }
-  if(type==='adjustment' && !entry.fromAccountId){ alert('Choose an account to adjust.'); return; }
+  if(type==='transfer' && !entry.fromAccountId && !entry.toAccountId){ restoreSaveEntryButton(); alert('Choose at least one account for this transfer.'); return; }
+  if(type==='adjustment' && !entry.fromAccountId){ restoreSaveEntryButton(); alert('Choose an account to adjust.'); return; }
 
   if(ui.editingId){
     const idx = state.entries.findIndex(e=>e.id===ui.editingId);
@@ -1994,12 +2013,14 @@ function saveEntry(){
   if($('filterType')) $('filterType').value = '';
   if($('filterRecurring')) $('filterRecurring').value = '';
   showAppToast(toastText);
+  renderTransactions();
   window.scrollTo({top:0, behavior:'smooth'});
 
   requestAnimationFrame(() => {
     renderAll();
     switchTab('transactions');
     showAppToast(toastText);
+    restoreSaveEntryButton();
   });
 }
 
@@ -3007,8 +3028,22 @@ function resetAccountForm(){
   $('accountIncludeNetWorth').checked = true;
 }
 function saveAccount(){
+  const saveBtn = $('saveAccountBtn');
+  if(saveBtn?.dataset.saving === '1') return;
+  if(saveBtn){
+    saveBtn.dataset.saving = '1';
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+  }
+  const restoreSaveAccountButton = () => {
+    if(saveBtn){
+      saveBtn.dataset.saving = '0';
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save account';
+    }
+  };
   const name = $('accountName').value.trim();
-  if(!name){ alert('Enter an account name.'); return; }
+  if(!name){ restoreSaveAccountButton(); alert('Enter an account name.'); return; }
   const acct = {
     id: ui.accountEditingId || uid(),
     name, institution: $('accountInstitution').value.trim(), type: $('accountType').value,
@@ -3021,6 +3056,7 @@ function saveAccount(){
     locked: $('accountLocked').checked,
     includeInNetWorth: $('accountIncludeNetWorth').checked
   };
+  const wasEditing = !!ui.accountEditingId;
   const i = state.accounts.findIndex(a => a.id===acct.id);
   if(i>=0) state.accounts[i]=acct; else state.accounts.push(acct);
   normalizeAccountOrder();
@@ -3028,7 +3064,16 @@ function saveAccount(){
   renderAccountSelects();
   $('accountFormCard').classList.add('hidden');
   resetAccountForm();
-  renderAll();
+  renderAccounts();
+  renderPayCardHelper();
+  renderUnassignedQueue();
+  showAppToast(wasEditing ? 'Account updated' : 'Account added');
+  requestAnimationFrame(() => {
+    renderAll();
+    switchTab('accounts');
+    showAppToast(wasEditing ? 'Account updated' : 'Account added');
+    restoreSaveAccountButton();
+  });
 }
 window.editAccount = (id) => {
   const a = getAccountById(id); if(!a) return;
@@ -3054,7 +3099,17 @@ window.deleteAccount = (id) => {
   normalizeAccountOrder();
   state.entries.forEach(e => { if(e.fromAccountId===id) e.fromAccountId=''; if(e.toAccountId===id) e.toAccountId=''; });
   state.recurringRules.forEach(r => { if(r.fromAccountId===id) r.fromAccountId=''; if(r.toAccountId===id) r.toAccountId=''; });
-  saveState(false); renderAccountSelects(); renderAll();
+  saveState(false);
+  renderAccountSelects();
+  renderAccounts();
+  renderPayCardHelper();
+  renderUnassignedQueue();
+  showAppToast('Account deleted');
+  requestAnimationFrame(() => {
+    renderAll();
+    switchTab('accounts');
+    showAppToast('Account deleted');
+  });
 };
 
 window.openAccountTransactions = (id) => { $('filterAccount').value=id; switchTab('transactions'); renderTransactions(); };
@@ -3143,7 +3198,11 @@ function createCardPayment(){
     splits: [], splitMode:'custom'
   });
   $('payCardAmount').value=''; $('payCardNotes').value='';
-  saveState(false); renderAll();
+  saveState(false);
+  renderAccounts();
+  renderTransactions();
+  showAppToast('Card payment created');
+  requestAnimationFrame(() => renderAll());
 }
 function missingAccountReason(e){
   if(e.type==='expense' && !e.fromAccountId) return 'Missing paid-from account/card';
