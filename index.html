@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#07111f" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<title>Macks Expense Tracker v9.5.7</title>
+<title>Macks Expense Tracker v9.5.8</title>
 <style>
 :root{
   --bg:#0f172a; --panel:#111827; --panel2:#1f2937; --text:#e5e7eb; --muted:#94a3b8; --accent:#38bdf8; --green:#22c55e; --red:#ef4444; --yellow:#f59e0b; --border:#334155;
@@ -592,7 +592,7 @@ input,select,textarea{
 
 <script>
 (() => {
-const VERSION = 'v9.5.7';
+const VERSION = 'v9.5.8';
 const STORAGE_KEY = 'macks-expense-tracker-v9_2';
 const AUTO_KEY = 'macks-expense-tracker-v9_2-autobackups';
 const CAD_RATES = { CAD:1, USD:1.36, EUR:1.48, GBP:1.73, JPY:0.0092, MXN:0.080 };
@@ -887,7 +887,25 @@ function loadState(){
 }
 function saveState(showToast=true){
   state.version = VERSION;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  const payload = JSON.stringify(state);
+  try{
+    localStorage.setItem(STORAGE_KEY, payload);
+  }catch(e){
+    // v9.5.8: Safari/iPhone storage can fill from old auto-backups.
+    // Clear only the app's auto-backup cache, then retry the real save once.
+    console.warn('Primary save failed; clearing auto backups and retrying', e);
+    try{ localStorage.removeItem(AUTO_KEY); }catch(cleanErr){ console.warn('Could not clear auto backups', cleanErr); }
+    try{
+      localStorage.setItem(STORAGE_KEY, payload);
+      state.meta = state.meta || {};
+      state.meta.lastAutoBackupAtMs = 0;
+      state.meta.lastAutoBackupAt = null;
+      showAppToast('Saved after clearing old auto backups');
+    }catch(retryErr){
+      console.error('Primary save retry failed', retryErr);
+      throw retryErr;
+    }
+  }
   createAutoBackup();
   if(showToast){ setSaveToast('Saved'); }
 }
@@ -895,16 +913,28 @@ function createAutoBackup(force=false){
   try{
     const now = Date.now();
     const last = Number(state?.meta?.lastAutoBackupAtMs || 0);
-    // Performance: do not rewrite 8 full backup copies on every tiny save.
-    // Keep regular protection, but throttle automatic backups to about once per minute.
-    if(!force && last && now - last < 60000) return;
+    // Performance/storage: keep fewer automatic backups and never let backup failure block saving.
+    if(!force && last && now - last < 300000) return;
     const backups = JSON.parse(localStorage.getItem(AUTO_KEY)||'[]');
-    backups.unshift({ ts: new Date(now).toISOString(), data: state });
+    const lightweight = {
+      ts: new Date(now).toISOString(),
+      version: VERSION,
+      counts: {
+        entries: Array.isArray(state.entries) ? state.entries.length : 0,
+        accounts: Array.isArray(state.accounts) ? state.accounts.length : 0,
+        recurringRules: Array.isArray(state.recurringRules) ? state.recurringRules.length : 0
+      },
+      data: state
+    };
+    backups.unshift(lightweight);
     state.meta = state.meta || {};
     state.meta.lastAutoBackupAtMs = now;
     state.meta.lastAutoBackupAt = new Date(now).toISOString();
-    localStorage.setItem(AUTO_KEY, JSON.stringify(backups.slice(0,6)));
-  }catch(e){ console.warn('Auto backup skipped', e); }
+    localStorage.setItem(AUTO_KEY, JSON.stringify(backups.slice(0,2)));
+  }catch(e){
+    try{ localStorage.removeItem(AUTO_KEY); }catch(cleanErr){}
+    console.warn('Auto backup skipped/cleared', e);
+  }
 }
 function setSaveToast(text){
   $('saveToast').textContent = text;
@@ -2034,7 +2064,7 @@ function saveEntry(){
   } catch (err) {
     console.error('Transaction saveState failed', err);
     restoreSaveEntryButton();
-    alert('The transaction could not be saved. Try exporting a backup, then clearing older auto backups if storage is full.');
+    alert('The transaction could not be saved. The app tried clearing old auto backups, but browser storage may still be full. Export a JSON backup before making more changes.');
     return;
   }
 
@@ -3107,7 +3137,7 @@ function saveAccount(){
   } catch (err) {
     console.error('Account saveState failed', err);
     restoreSaveAccountButton();
-    alert('The account could not be saved. Try exporting a backup, then clearing older auto backups if storage is full.');
+    alert('The account could not be saved. The app tried clearing old auto backups, but browser storage may still be full. Export a JSON backup before making more changes.');
     return;
   }
 
