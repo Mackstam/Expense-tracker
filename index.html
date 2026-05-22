@@ -3,12 +3,16 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Macks Expense Tracker v9.4.1</title>
+<meta name="theme-color" content="#07111f" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>Macks Expense Tracker v9.5.1</title>
 <style>
 :root{
   --bg:#0f172a; --panel:#111827; --panel2:#1f2937; --text:#e5e7eb; --muted:#94a3b8; --accent:#38bdf8; --green:#22c55e; --red:#ef4444; --yellow:#f59e0b; --border:#334155;
 }
 *{box-sizing:border-box}
+html{background:#07111f;min-height:100%;}
 body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:#0b1220;color:var(--text);padding-bottom:90px}
 header{padding:14px 14px 4px}
 h1,h2,h3{margin:0 0 8px}
@@ -44,6 +48,7 @@ button:disabled{opacity:.5}
 .nav button{padding:8px 4px;border-radius:12px;font-size:12px}
 .nav button.active{background:var(--accent);color:#03111a;border:none;font-weight:700}
 .version{position:fixed;right:10px;bottom:64px;font-size:12px;opacity:.55;background:#0f172a;border:1px solid var(--border);padding:4px 7px;border-radius:999px;z-index:25}
+.appToast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(16px);opacity:0;pointer-events:none;z-index:60;background:rgba(15,23,42,.96);border:1px solid rgba(56,189,248,.34);color:#e5e7eb;border-radius:999px;padding:10px 14px;box-shadow:0 16px 40px rgba(0,0,0,.34);font-size:14px;transition:opacity .18s ease,transform .18s ease;white-space:nowrap}.appToast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .tableLine{display:grid;grid-template-columns:1.1fr .9fr .9fr;gap:8px;align-items:center}
 .splitRow{display:grid;grid-template-columns:1fr;gap:8px;align-items:end}
 @media(min-width:700px){.splitRow{grid-template-columns:1.1fr .8fr .9fr 1fr auto}}
@@ -69,7 +74,7 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
   .summaryGrid{grid-template-columns:repeat(4,1fr)}
 }
 
-/* v9.5.0 UI refresh: visual only */
+/* v9.5.1 UI refresh: visual only */
 :root{
   --app-bg:#07111f;
   --card-bg:rgba(15,23,42,.86);
@@ -78,9 +83,21 @@ hr.sep{border:none;border-top:1px solid rgba(148,163,184,.18);margin:10px 0}
   --hero-border:rgba(56,189,248,.30);
 }
 body{
+  min-height:100vh;
+  min-height:100dvh;
+  background-color:#07111f;
   background:
     radial-gradient(circle at top left, rgba(56,189,248,.12), transparent 34%),
     linear-gradient(180deg,#08111f 0%,#0b1220 48%,#07111f 100%);
+}
+body::before{
+  content:"";
+  position:fixed;
+  top:0;left:0;right:0;
+  height:calc(env(safe-area-inset-top,0px) + 12px);
+  background:#07111f;
+  z-index:9999;
+  pointer-events:none;
 }
 header{padding:18px 18px 6px}
 header h2{font-size:29px;letter-spacing:-.03em}
@@ -561,6 +578,7 @@ input,select,textarea{
 </section>
 
 <div class="version" id="versionBadge"></div>
+<div class="appToast" id="appToast" role="status" aria-live="polite"></div>
 
 <nav class="nav" style="grid-template-columns:repeat(7,1fr)">
   <button data-tab="dashboard" class="active">Home</button>
@@ -574,7 +592,7 @@ input,select,textarea{
 
 <script>
 (() => {
-const VERSION = 'v9.4.1';
+const VERSION = 'v9.5.1';
 const STORAGE_KEY = 'macks-expense-tracker-v9_2';
 const AUTO_KEY = 'macks-expense-tracker-v9_2-autobackups';
 const CAD_RATES = { CAD:1, USD:1.36, EUR:1.48, GBP:1.73, JPY:0.0092, MXN:0.080 };
@@ -883,6 +901,14 @@ function createAutoBackup(){
 function setSaveToast(text){
   $('saveToast').textContent = text;
   setTimeout(()=>{ if($('saveToast').textContent===text) $('saveToast').textContent=''; }, 1800);
+}
+function showAppToast(text){
+  const el = $('appToast');
+  if(!el) return;
+  el.textContent = text;
+  el.classList.add('show');
+  clearTimeout(showAppToast._timer);
+  showAppToast._timer = setTimeout(()=>el.classList.remove('show'), 2200);
 }
 
 function syncCategoryForType(){
@@ -1957,11 +1983,13 @@ function saveEntry(){
   if(entry.type==='income'){
     assignIncomeToRecurring(state.entries.find(e => e.id===entry.id) || entry);
   }
-  saveState();
-  setSaveToast('Saved');
+  const wasEditing = !!ui.editingId;
+  saveState(false);
   resetForm();
   renderAll();
   switchTab('transactions');
+  window.scrollTo({top:0, behavior:'smooth'});
+  showAppToast(wasEditing ? 'Transaction updated' : 'Transaction added');
 }
 
 function resetForm(){
